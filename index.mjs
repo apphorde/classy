@@ -241,7 +241,7 @@ async function processFile(filePath) {
   console.log(`🔍 Scanning: ${fileName}`);
 
   // Reuse metadata for duplicate content, but only write the location after it is known valid.
-  if (existingSignature) {
+  if (existingSignature && !existingSignature.llm_error) {
     await saveLocation(filePath, sha256, stats.size, existingPath);
     console.log(`➡️ Duplicate content identified. Logged location and skipped deep analysis.`);
     return true;
