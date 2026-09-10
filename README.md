@@ -118,6 +118,18 @@ curl -X POST https://classy.api.apphor.de/scan
 curl https://classy.api.apphor.de/status
 ```
 
+The archive UI is available at the same URL. It is responsive, supports image,
+audio, and video previews, and can be installed as a PWA from a compatible
+browser.
+
+### Media API
+
+- `GET /api/media`: paginated indexed media. Supports `search`, `type`, `category`, `limit`, and `offset`.
+- `GET /api/media/:id`: full metadata for one indexed file.
+- `GET /api/media/:id/content`: stream the original file, including byte ranges for video and audio playback.
+- `GET /api/status`: scan counters and the current index location.
+- `POST /scan`: trigger a new scan.
+
 ## Database Tables
 
 ### `media_signatures`

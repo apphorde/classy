@@ -340,6 +340,148 @@ async function startCrawling(dir) {
   }
 }
 
+function parseMetadata(value) {
+  if (!value) return {};
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {};
+  }
+}
+
+function serializeMedia(row) {
+  const metadata = parseMetadata(row.raw_metadata);
+  return {
+    id: row.id,
+    name: path.basename(row.file_path),
+    relativePath: path.relative(SCAN_DIR, row.file_path),
+    size: row.file_size,
+    type: row.file_type || 'unknown',
+    date: row.extracted_date || null,
+    category: row.ai_category || 'Unsorted',
+    summary: row.ai_summary || '',
+    metadata,
+    contentUrl: `/api/media/${row.id}/content`,
+  };
+}
+
+async function listMedia(url) {
+  const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 48, 1), 100);
+  const offset = Math.max(Number(url.searchParams.get('offset')) || 0, 0);
+  const search = url.searchParams.get('search')?.trim() || '';
+  const type = url.searchParams.get('type')?.trim() || '';
+  const category = url.searchParams.get('category')?.trim() || '';
+  const conditions = [];
+  const params = [];
+
+  if (search) {
+    conditions.push('(l.file_path LIKE ? OR s.ai_summary LIKE ? OR s.ai_category LIKE ?)');
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+  }
+  if (type) {
+    conditions.push('s.file_type = ?');
+    params.push(type);
+  }
+  if (category) {
+    conditions.push('s.ai_category = ?');
+    params.push(category);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const rows = await db.all(
+    `
+      SELECT l.id, l.file_path, l.file_size, s.file_type, s.extracted_date,
+             s.ai_category, s.ai_summary, s.raw_metadata
+      FROM file_locations l
+      LEFT JOIN media_signatures s ON s.sha256 = l.sha256
+      ${where}
+      ORDER BY COALESCE(s.extracted_date, '') DESC, l.id DESC
+      LIMIT ? OFFSET ?
+    `,
+    [...params, limit, offset],
+  );
+  const count = await db.get(
+    `
+      SELECT COUNT(*) AS total
+      FROM file_locations l
+      LEFT JOIN media_signatures s ON s.sha256 = l.sha256
+      ${where}
+    `,
+    params,
+  );
+  return {
+    items: rows.map(serializeMedia),
+    total: Number(count?.total || 0),
+    limit,
+    offset,
+  };
+}
+
+async function getMedia(id) {
+  return db.get(
+    `
+      SELECT l.id, l.file_path, l.file_size, s.file_type, s.extracted_date,
+             s.ai_category, s.ai_summary, s.raw_metadata
+      FROM file_locations l
+      LEFT JOIN media_signatures s ON s.sha256 = l.sha256
+      WHERE l.id = ?
+    `,
+    [id],
+  );
+}
+
+function sendJson(res, status, value) {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify(value));
+}
+
+async function serveMediaContent(req, res, id) {
+  const row = await getMedia(id);
+  if (!row) return sendJson(res, 404, { error: 'Media not found' });
+
+  const filePath = path.resolve(row.file_path);
+  const scanRoot = path.resolve(SCAN_DIR);
+  if (filePath !== scanRoot && !filePath.startsWith(`${scanRoot}${path.sep}`)) {
+    return sendJson(res, 403, { error: 'Media path is outside the scan directory' });
+  }
+
+  let stats;
+  try {
+    stats = fs.statSync(filePath);
+  } catch {
+    return sendJson(res, 404, { error: 'Media file is unavailable' });
+  }
+
+  const contentType = mime.lookup(filePath) || 'application/octet-stream';
+  const headers = {
+    'Content-Type': contentType,
+    'Accept-Ranges': 'bytes',
+    'Cache-Control': 'public, max-age=3600',
+  };
+  const range = req.headers.range;
+  let start = 0;
+  let end = stats.size - 1;
+  let status = 200;
+
+  if (range) {
+    const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+    if (!match) return sendJson(res, 416, { error: 'Invalid byte range' });
+    if (match[1]) start = Number(match[1]);
+    if (match[2]) end = Number(match[2]);
+    if (!match[1]) start = Math.max(stats.size - end, 0);
+    if (!match[2]) end = stats.size - 1;
+    if (start > end || start >= stats.size) return sendJson(res, 416, { error: 'Range not satisfiable' });
+    end = Math.min(end, stats.size - 1);
+    status = 206;
+    headers['Content-Range'] = `bytes ${start}-${end}/${stats.size}`;
+  }
+
+  headers['Content-Length'] = end - start + 1;
+  res.writeHead(status, headers);
+  if (req.method !== 'HEAD') fs.createReadStream(filePath, { start, end }).pipe(res);
+  else res.end();
+}
+
 let inProgress = false;
 async function run() {
   if (inProgress) return;
@@ -384,7 +526,41 @@ createServer(function (req, res) {
   const url = new URL(req.url, 'http://local');
   const route = `${req.method} ${url.pathname}`;
 
+  const mediaContentMatch = /^(?:GET|HEAD) \/api\/media\/(\d+)\/content$/.exec(route);
+  if (mediaContentMatch) {
+    startup.then(() => serveMediaContent(req, res, mediaContentMatch[1])).catch((error) => sendJson(res, 503, { error: error.message }));
+    return;
+  }
+
+  const mediaDetailMatch = /^GET \/api\/media\/(\d+)$/.exec(route);
+  if (mediaDetailMatch) {
+    startup.then(() => getMedia(mediaDetailMatch[1])).then((row) => row ? sendJson(res, 200, serializeMedia(row)) : sendJson(res, 404, { error: 'Media not found' })).catch((error) => sendJson(res, 503, { error: error.message }));
+    return;
+  }
+
   switch (route) {
+    case 'GET /':
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(fs.readFileSync(path.join(SCRIPT_DIR, 'public/index.html')));
+      break;
+    case 'GET /manifest.webmanifest':
+      res.writeHead(200, { 'Content-Type': 'application/manifest+json; charset=utf-8', 'Cache-Control': 'public, max-age=3600' });
+      res.end(fs.readFileSync(path.join(SCRIPT_DIR, 'public/manifest.webmanifest')));
+      break;
+    case 'GET /icon.svg':
+      res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' });
+      res.end(fs.readFileSync(path.join(SCRIPT_DIR, 'public/icon.svg')));
+      break;
+    case 'GET /sw.js':
+      res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-cache' });
+      res.end(fs.readFileSync(path.join(SCRIPT_DIR, 'public/sw.js')));
+      break;
+    case 'GET /api/media':
+      startup.then(() => listMedia(url)).then((data) => sendJson(res, 200, data)).catch((error) => sendJson(res, 503, { error: error.message }));
+      break;
+    case 'GET /api/status':
+      startup.then(() => db.get('SELECT COUNT(*) AS total FROM file_locations')).then((count) => sendJson(res, 200, { ...scanStatus, total: Number(count?.total || 0) })).catch((error) => sendJson(res, 503, { error: error.message }));
+      break;
     case 'POST /scan':
       startup.then(() => run());
       res.writeHead(202, { 'Content-Type': 'application/json' });
@@ -401,5 +577,3 @@ createServer(function (req, res) {
 }).listen(process.env.PORT, function () {
   console.log('Classy started on port ' + process.env.PORT);
 });
-
-main().catch(console.error);
