@@ -64,15 +64,20 @@ OLLAMA_URL="http://localhost:11434/v1" \
 pnpm start
 ```
 
-The worker exits after one complete scan. Run it again to scan for new paths.
-
-The minimal HTTP health process can be started separately with:
+The application starts the HTTP health process and performs an initial scan.
+Trigger another scan with:
 
 ```sh
-PORT=3000 node index.mjs
+curl -X POST http://localhost:3000/scan
 ```
 
-It responds with `OK` to every request.
+Monitor the current scan with:
+
+```sh
+curl http://localhost:3000/status
+```
+
+The root endpoint responds with `OK`.
 
 ## Docker
 
@@ -92,11 +97,6 @@ docker run --rm \
 The exact mount path must match the container's process working directory,
 because the application resolves `data/` from `process.cwd()`.
 
-The `Procfile` defines two process types:
-
-- `web`: starts the HTTP health process
-- `indexer`: performs one indexing pass
-
 ## Deployment
 
 The deployed health endpoint is available at:
@@ -110,6 +110,13 @@ curl https://classy.api.apphor.de
 ```
 
 The expected response is `OK`.
+
+Start a scan and inspect its progress with:
+
+```sh
+curl -X POST https://classy.api.apphor.de/scan
+curl https://classy.api.apphor.de/status
+```
 
 ## Database Tables
 

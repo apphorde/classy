@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "description": "Autonomous media classification loop via remote Ollama and HTTPS SQLite wrapper",
-  "main": "indexer.mjs",
+  "main": "index.mjs",
   "scripts": {
-    "start": "node indexer.mjs"
+    "start": "node index.mjs"
   },
   "dependencies": {
     "exif-parser": "^0.1.12",

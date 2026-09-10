@@ -1,22 +1,36 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import mime from 'mime-types';
 import exifParser from 'exif-parser';
-import { join } from 'path';
 import console from 'console';
 import { createServer } from 'node:http';
+import { fileURLToPath } from 'node:url';
 
 // Import your custom remote SQLite module
 let db;
 
 // Configuration (Pull from environment variables passed to Docker container)
 const OLLAMA_URL = process.env.OLLAMA_URL;
-const SCAN_DIR = join(process.cwd(), 'data');
+const SCAN_DIR = path.join(process.cwd(), 'data');
 const VISION_MODEL = process.env.VISION_MODEL || 'qwen2.5-vl:7b';
 const TEXT_MODEL = process.env.TEXT_MODEL || 'gemma2:27b';
 const DB_URL = process.env.DATABASE_URL;
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+
+const scanStatus = {
+  scanDir: SCAN_DIR,
+  running: false,
+  scanned: 0,
+  indexed: 0,
+  skipped: 0,
+  failed: 0,
+  lastStartedAt: null,
+  lastCompletedAt: null,
+  lastIndexedPath: null,
+  lastError: null,
+};
 
 if (!DB_URL) {
   console.log('Set DATABASE_URL first!');
@@ -80,6 +94,7 @@ async function initializeDatabase() {
       file_size INTEGER
     )
   `);
+  await db.run(`CREATE INDEX IF NOT EXISTS idx_file_locations_sha256 ON file_locations (sha256)`);
   console.log('✅ Schema initialized successfully.');
 }
 
@@ -98,7 +113,7 @@ function getFileHash(filePath) {
  */
 function runPythonExtractor(scriptPath, filePath) {
   try {
-    const output = execSync(`python3 ${scriptPath} "${filePath}"`, { encoding: 'utf-8' });
+    const output = execFileSync('python3', [path.join(SCRIPT_DIR, scriptPath), filePath], { encoding: 'utf-8' });
     return JSON.parse(output.trim());
   } catch (error) {
     return { error: error.message };
@@ -120,20 +135,43 @@ function extractVideoFrames(videoPath) {
   try {
     // Get duration
     const duration = parseFloat(
-      execSync(
-        `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nocorrect_bps=1 "${videoPath}"`,
-      )
+      execFileSync('ffprobe', [
+        '-v',
+        'error',
+        '-show_entries',
+        'format=duration',
+        '-of',
+        'default=noprint_wrappers=1:nocorrect_bps=1',
+        videoPath,
+      ])
         .toString()
         .trim(),
     );
 
     // Extract frames at 10%, 50%, and 90% marks
-    execSync(`ffmpeg -y -ss ${duration * 0.1} -i "${videoPath}" -vframes 1 -q:v 2 "${f1}" 2>/dev/null`);
-    execSync(`ffmpeg -y -ss ${duration * 0.5} -i "${videoPath}" -vframes 1 -q:v 2 "${f2}" 2>/dev/null`);
-    execSync(`ffmpeg -y -ss ${duration * 0.9} -i "${videoPath}" -vframes 1 -q:v 2 "${f3}" 2>/dev/null`);
+    execFileSync('ffmpeg', ['-y', '-ss', String(duration * 0.1), '-i', videoPath, '-vframes', '1', '-q:v', '2', f1], {
+      stdio: 'ignore',
+    });
+    execFileSync('ffmpeg', ['-y', '-ss', String(duration * 0.5), '-i', videoPath, '-vframes', '1', '-q:v', '2', f2], {
+      stdio: 'ignore',
+    });
+    execFileSync('ffmpeg', ['-y', '-ss', String(duration * 0.9), '-i', videoPath, '-vframes', '1', '-q:v', '2', f3], {
+      stdio: 'ignore',
+    });
 
     // Merge frames into one image for the vision model
-    execSync(`ffmpeg -y -i "${f1}" -i "${f2}" -i "${f3}" -filter_complex hstack=inputs=3 "${combined}" 2>/dev/null`);
+    execFileSync('ffmpeg', [
+      '-y',
+      '-i',
+      f1,
+      '-i',
+      f2,
+      '-i',
+      f3,
+      '-filter_complex',
+      'hstack=inputs=3',
+      combined,
+    ], { stdio: 'ignore' });
     return combined;
   } catch (err) {
     console.error(`⚠️ Video frame extraction failed for ${path.basename(videoPath)}`);
@@ -145,12 +183,14 @@ function extractVideoFrames(videoPath) {
  * Interacts with Ollama Chat API
  */
 async function queryOllama(model, prompt, imagePath = null) {
+  const ollamaUrl = new URL(OLLAMA_URL);
+  const openAiCompatible = ollamaUrl.pathname.replace(/\/+$/, '').endsWith('/v1');
   const payload = {
     model: model,
     messages: [{ role: 'user', content: prompt }],
     stream: false,
     options: { temperature: 0.2 },
-    response_format: { type: 'json_object' },
+    ...(openAiCompatible ? { response_format: { type: 'json_object' } } : { format: 'json' }),
   };
 
   if (imagePath && fs.existsSync(imagePath)) {
@@ -159,11 +199,13 @@ async function queryOllama(model, prompt, imagePath = null) {
   }
 
   try {
-    const res = await fetch(`${OLLAMA_URL}/chat`, {
+    const chatUrl = openAiCompatible ? new URL('chat', `${ollamaUrl.toString().replace(/\/$/, '')}/`) : new URL('/api/chat', ollamaUrl);
+    const res = await fetch(chatUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+    if (!res.ok) throw new Error(`Ollama returned HTTP ${res.status}`);
     const json = await res.json();
     return JSON.parse(json.message.content);
   } catch (err) {
@@ -178,31 +220,20 @@ async function processFile(filePath) {
   const fileName = path.basename(filePath);
   const stats = fs.statSync(filePath);
   const mimeType = mime.lookup(filePath) || '';
-
-  // 1. Skip paths that have already been tracked
-  const existingPath = await db.get(`SELECT id FROM file_locations WHERE file_path = ?`, [filePath]);
-  if (existingPath) return;
-
-  console.log(`🔍 Scanning: ${fileName}`);
   const sha256 = getFileHash(filePath);
 
-  // 2. Insert reference tracker immediately
-  try {
-    await db.run(`INSERT INTO file_locations (sha256, file_path, file_size) VALUES (?, ?, ?)`, [
-      sha256,
-      filePath,
-      stats.size,
-    ]);
-  } catch (e) {
-    // Unique constraint hit on file_path, skip
-    return;
-  }
-
-  // 3. Check if file signature data already exists (Duplicate data elimination)
+  // Hash before deciding whether a path is already indexed so replacements are reprocessed.
+  const existingPath = await db.get(`SELECT id, sha256 FROM file_locations WHERE file_path = ?`, [filePath]);
   const existingSignature = await db.get(`SELECT sha256 FROM media_signatures WHERE sha256 = ?`, [sha256]);
+  if (existingPath?.sha256 === sha256 && existingSignature) return false;
+
+  console.log(`🔍 Scanning: ${fileName}`);
+
+  // Reuse metadata for duplicate content, but only write the location after it is known valid.
   if (existingSignature) {
+    await saveLocation(filePath, sha256, stats.size, existingPath);
     console.log(`➡️ Duplicate content identified. Logged location and skipped deep analysis.`);
-    return;
+    return true;
   }
 
   // Determine media category type
@@ -267,13 +298,24 @@ async function processFile(filePath) {
   `,
     [sha256, type, extractedDate, aiCategory, aiSummary, JSON.stringify(rawMeta)],
   );
+  await saveLocation(filePath, sha256, stats.size, existingPath);
+  return true;
+}
+
+async function saveLocation(filePath, sha256, fileSize, existingPath) {
+  if (existingPath) {
+    await db.run(`UPDATE file_locations SET sha256 = ?, file_size = ? WHERE id = ?`, [sha256, fileSize, existingPath.id]);
+    return;
+  }
+
+  await db.run(`INSERT INTO file_locations (sha256, file_path, file_size) VALUES (?, ?, ?)`, [sha256, filePath, fileSize]);
 }
 
 /**
  * Scan folders recursively
  */
 async function startCrawling(dir) {
-  if (!fs.existsSync(dir)) return;
+  if (!fs.existsSync(dir)) throw new Error(`Scan directory does not exist: ${dir}`);
 
   const items = fs.readdirSync(dir);
   for (const item of items) {
@@ -281,7 +323,19 @@ async function startCrawling(dir) {
     if (fs.statSync(fullPath).isDirectory()) {
       await startCrawling(fullPath);
     } else {
-      await processFile(fullPath);
+      scanStatus.scanned += 1;
+      try {
+        const indexed = await processFile(fullPath);
+        if (indexed) {
+          scanStatus.indexed += 1;
+          scanStatus.lastIndexedPath = fullPath;
+        }
+        else scanStatus.skipped += 1;
+      } catch (error) {
+        scanStatus.failed += 1;
+        scanStatus.lastError = `${fullPath}: ${error.message}`;
+        console.error(`⚠️ Failed to index ${fullPath}:`, error.message);
+      }
     }
   }
 }
@@ -291,15 +345,25 @@ async function run() {
   if (inProgress) return;
 
   inProgress = true;
+  scanStatus.running = true;
+  scanStatus.scanned = 0;
+  scanStatus.indexed = 0;
+  scanStatus.skipped = 0;
+  scanStatus.failed = 0;
+  scanStatus.lastError = null;
+  scanStatus.lastStartedAt = new Date().toISOString();
 
   try {
     console.log(`🚀 Starting processing engine on target: ${SCAN_DIR}`);
     await startCrawling(SCAN_DIR);
     console.log('🏁 Loop execution completed successfully.');
   } catch (e) {
+    scanStatus.lastError = e.message;
     console.error(e);
   } finally {
     inProgress = false;
+    scanStatus.running = false;
+    scanStatus.lastCompletedAt = new Date().toISOString();
   }
 }
 
@@ -307,8 +371,14 @@ async function run() {
 async function main() {
   await initializeDatabase();
   await bootstrapOllama();
-  run();
 }
+
+const startup = main()
+  .then(() => run())
+  .catch((error) => {
+    scanStatus.lastError = error.message;
+    console.error(error);
+  });
 
 createServer(function (req, res) {
   const url = new URL(req.url, 'http://local');
@@ -316,8 +386,13 @@ createServer(function (req, res) {
 
   switch (route) {
     case 'POST /scan':
-      run();
-      res.end('Scanning started');
+      startup.then(() => run());
+      res.writeHead(202, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ message: 'Scanning started' }));
+      break;
+    case 'GET /status':
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(scanStatus));
       break;
 
     default:
