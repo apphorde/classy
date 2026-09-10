@@ -49,6 +49,7 @@ Set these environment variables before starting the indexer:
 | `OLLAMA_URL` | Yes | None | Ollama chat API base URL |
 | `VISION_MODEL` | No | `qwen2.5-vl:7b` | Model used for photos and video frames |
 | `TEXT_MODEL` | No | `gemma2:27b` | Model used for PDFs and EPUBs |
+| `SCAN_INTERVAL_HOURS` | No | `12` | Hours between background maintenance scans |
 | `PORT` | For web process | None | Port used by the health-check server |
 
 The input directory is fixed to `data/` relative to the process working
@@ -64,8 +65,10 @@ OLLAMA_URL="http://localhost:11434/v1" \
 pnpm start
 ```
 
-The application starts the HTTP health process and performs an initial scan.
-Trigger another scan with:
+The application starts the HTTP health process, performs an initial scan, and
+repeats maintenance scans every 12 hours by default. Each maintenance scan
+removes database paths for files that no longer exist, then indexes new or
+changed files. Trigger an immediate scan with:
 
 ```sh
 curl -X POST http://localhost:3000/scan
@@ -129,6 +132,9 @@ browser.
 - `GET /api/media/:id/content`: stream the original file, including byte ranges for video and audio playback.
 - `GET /api/status`: scan counters and the current index location.
 - `POST /scan`: trigger a new scan.
+
+The status response includes `removed`, `lastPrunedAt`, and
+`nextScheduledAt` for maintenance-loop visibility.
 
 ## Database Tables
 

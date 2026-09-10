@@ -18,6 +18,8 @@ const VISION_MODEL = process.env.VISION_MODEL || 'qwen2.5-vl:7b';
 const TEXT_MODEL = process.env.TEXT_MODEL || 'gemma2:27b';
 const DB_URL = process.env.DATABASE_URL;
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const SCAN_INTERVAL_HOURS = Math.max(Number(process.env.SCAN_INTERVAL_HOURS) || 12, 1);
+const SCAN_INTERVAL_MS = SCAN_INTERVAL_HOURS * 60 * 60 * 1000;
 
 const scanStatus = {
   scanDir: SCAN_DIR,
@@ -26,9 +28,12 @@ const scanStatus = {
   indexed: 0,
   skipped: 0,
   failed: 0,
+  removed: 0,
   lastStartedAt: null,
   lastCompletedAt: null,
   lastIndexedPath: null,
+  lastPrunedAt: null,
+  nextScheduledAt: null,
   lastError: null,
 };
 
@@ -362,6 +367,25 @@ async function startCrawling(dir) {
   }
 }
 
+async function pruneMissingLocations() {
+  const locations = await db.all(`SELECT id, file_path FROM file_locations`);
+  let removed = 0;
+
+  for (const location of locations) {
+    try {
+      fs.statSync(location.file_path);
+    } catch (error) {
+      if (error.code !== 'ENOENT') continue;
+      await db.run(`DELETE FROM file_locations WHERE id = ?`, [location.id]);
+      removed += 1;
+    }
+  }
+
+  scanStatus.removed = removed;
+  scanStatus.lastPrunedAt = new Date().toISOString();
+  if (removed) console.log(`🧹 Removed ${removed} missing file location${removed === 1 ? '' : 's'}.`);
+}
+
 function parseMetadata(value) {
   if (!value) return {};
   try {
@@ -515,11 +539,13 @@ async function run() {
   scanStatus.indexed = 0;
   scanStatus.skipped = 0;
   scanStatus.failed = 0;
+  scanStatus.removed = 0;
   scanStatus.lastError = null;
   scanStatus.lastStartedAt = new Date().toISOString();
 
   try {
     console.log(`🚀 Starting processing engine on target: ${SCAN_DIR}`);
+    await pruneMissingLocations();
     await startCrawling(SCAN_DIR);
     console.log('🏁 Loop execution completed successfully.');
   } catch (e) {
@@ -539,10 +565,17 @@ async function main() {
 }
 
 const ready = main().catch((error) => {
-    scanStatus.lastError = error.message;
-    console.error(error);
-  });
-ready.then(() => run());
+  scanStatus.lastError = error.message;
+  console.error(error);
+});
+ready.then(async () => {
+  await run();
+  scanStatus.nextScheduledAt = new Date(Date.now() + SCAN_INTERVAL_MS).toISOString();
+  setInterval(async () => {
+    await run();
+    scanStatus.nextScheduledAt = new Date(Date.now() + SCAN_INTERVAL_MS).toISOString();
+  }, SCAN_INTERVAL_MS);
+});
 
 createServer(function (req, res) {
   const url = new URL(req.url, 'http://local');
