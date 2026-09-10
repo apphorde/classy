@@ -538,12 +538,11 @@ async function main() {
   await bootstrapOllama();
 }
 
-const startup = main()
-  .then(() => run())
-  .catch((error) => {
+const ready = main().catch((error) => {
     scanStatus.lastError = error.message;
     console.error(error);
   });
+ready.then(() => run());
 
 createServer(function (req, res) {
   const url = new URL(req.url, 'http://local');
@@ -551,13 +550,13 @@ createServer(function (req, res) {
 
   const mediaContentMatch = /^(?:GET|HEAD) \/api\/media\/(\d+)\/content$/.exec(route);
   if (mediaContentMatch) {
-    startup.then(() => serveMediaContent(req, res, mediaContentMatch[1])).catch((error) => sendJson(res, 503, { error: error.message }));
+    ready.then(() => serveMediaContent(req, res, mediaContentMatch[1])).catch((error) => sendJson(res, 503, { error: error.message }));
     return;
   }
 
   const mediaDetailMatch = /^GET \/api\/media\/(\d+)$/.exec(route);
   if (mediaDetailMatch) {
-    startup.then(() => getMedia(mediaDetailMatch[1])).then((row) => row ? sendJson(res, 200, serializeMedia(row)) : sendJson(res, 404, { error: 'Media not found' })).catch((error) => sendJson(res, 503, { error: error.message }));
+    ready.then(() => getMedia(mediaDetailMatch[1])).then((row) => row ? sendJson(res, 200, serializeMedia(row)) : sendJson(res, 404, { error: 'Media not found' })).catch((error) => sendJson(res, 503, { error: error.message }));
     return;
   }
 
@@ -579,13 +578,13 @@ createServer(function (req, res) {
       res.end(fs.readFileSync(path.join(SCRIPT_DIR, 'public/sw.js')));
       break;
     case 'GET /api/media':
-      startup.then(() => listMedia(url)).then((data) => sendJson(res, 200, data)).catch((error) => sendJson(res, 503, { error: error.message }));
+      ready.then(() => listMedia(url)).then((data) => sendJson(res, 200, data)).catch((error) => sendJson(res, 503, { error: error.message }));
       break;
     case 'GET /api/status':
-      startup.then(() => db.get('SELECT COUNT(*) AS total FROM file_locations')).then((count) => sendJson(res, 200, { ...scanStatus, total: Number(count?.total || 0) })).catch((error) => sendJson(res, 503, { error: error.message }));
+      ready.then(() => db.get('SELECT COUNT(*) AS total FROM file_locations')).then((count) => sendJson(res, 200, { ...scanStatus, total: Number(count?.total || 0) })).catch((error) => sendJson(res, 503, { error: error.message }));
       break;
     case 'POST /scan':
-      startup.then(() => run());
+      ready.then(() => run());
       res.writeHead(202, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ message: 'Scanning started' }));
       break;
