@@ -89,6 +89,7 @@ async function initializeDatabase() {
       ai_summary TEXT,
       raw_metadata TEXT,
       ai_tags TEXT,
+      enrichment_version INTEGER NOT NULL DEFAULT 0,
       llm_error TEXT
     )
   `);
@@ -109,6 +110,11 @@ async function initializeDatabase() {
   }
   try {
     await db.run(`ALTER TABLE media_signatures ADD COLUMN ai_tags TEXT`);
+  } catch {
+    // Existing installations already have this column.
+  }
+  try {
+    await db.run(`ALTER TABLE media_signatures ADD COLUMN enrichment_version INTEGER NOT NULL DEFAULT 0`);
   } catch {
     // Existing installations already have this column.
   }
@@ -164,7 +170,7 @@ function extractVideoFrames(videoPath) {
         '-show_entries',
         'format=duration',
         '-of',
-        'default=noprint_wrappers=1:nocorrect_bps=1',
+        'default=noprint_wrappers=1',
         videoPath,
       ])
         .toString()
@@ -249,13 +255,13 @@ async function processFile(filePath) {
 
   // Hash before deciding whether a path is already indexed so replacements are reprocessed.
   const existingPath = await db.get(`SELECT id, sha256 FROM file_locations WHERE file_path = ?`, [filePath]);
-  const existingSignature = await db.get(`SELECT sha256, llm_error FROM media_signatures WHERE sha256 = ?`, [sha256]);
-  if (existingPath?.sha256 === sha256 && existingSignature && !existingSignature.llm_error) return false;
+  const existingSignature = await db.get(`SELECT sha256, llm_error, enrichment_version FROM media_signatures WHERE sha256 = ?`, [sha256]);
+  if (existingPath?.sha256 === sha256 && existingSignature && !existingSignature.llm_error && existingSignature.enrichment_version >= 1) return false;
 
   console.log(`🔍 Scanning: ${fileName}`);
 
   // Reuse metadata for duplicate content, but only write the location after it is known valid.
-  if (existingSignature && !existingSignature.llm_error) {
+  if (existingSignature && !existingSignature.llm_error && existingSignature.enrichment_version >= 1) {
     await saveLocation(filePath, sha256, stats.size, existingPath);
     console.log(`➡️ Duplicate content identified. Logged location and skipped deep analysis.`);
     return true;
@@ -334,15 +340,15 @@ async function processFile(filePath) {
   }
 
   // Save the record
-  const signatureValues = [type, extractedDate, aiCategory, aiSummary, JSON.stringify(rawMeta), JSON.stringify(aiTags), llmError];
+  const signatureValues = [type, extractedDate, aiCategory, aiSummary, JSON.stringify(rawMeta), JSON.stringify(aiTags), 1, llmError];
   if (existingSignature) {
     await db.run(
-      `UPDATE media_signatures SET file_type = ?, extracted_date = ?, ai_category = ?, ai_summary = ?, raw_metadata = ?, ai_tags = ?, llm_error = ? WHERE sha256 = ?`,
+      `UPDATE media_signatures SET file_type = ?, extracted_date = ?, ai_category = ?, ai_summary = ?, raw_metadata = ?, ai_tags = ?, enrichment_version = ?, llm_error = ? WHERE sha256 = ?`,
       [...signatureValues, sha256],
     );
   } else {
     await db.run(
-      `INSERT INTO media_signatures (sha256, file_type, extracted_date, ai_category, ai_summary, raw_metadata, ai_tags, llm_error) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO media_signatures (sha256, file_type, extracted_date, ai_category, ai_summary, raw_metadata, ai_tags, enrichment_version, llm_error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [sha256, ...signatureValues],
     );
   }
