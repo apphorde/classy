@@ -1,0 +1,14 @@
+{
+  "name": "media-classifier-loop",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Autonomous media classification loop via remote Ollama and HTTPS SQLite wrapper",
+  "main": "indexer.mjs",
+  "scripts": {
+    "start": "node indexer.mjs"
+  },
+  "dependencies": {
+    "exif-parser": "^0.1.12",
+    "mime-types": "^2.1.35"
+  }
+}
