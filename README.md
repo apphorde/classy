@@ -131,10 +131,27 @@ browser.
 - `GET /api/media/:id`: full metadata for one indexed file.
 - `GET /api/media/:id/content`: stream the original file, including byte ranges for video and audio playback.
 - `GET /api/status`: scan counters and the current index location.
-- `POST /scan`: trigger a new scan.
+- `POST /api/scan`: trigger a new scan and return immediately with `202`.
+- `POST /scan`: backwards-compatible alias for the scan trigger.
 
 The status response includes `removed`, `lastPrunedAt`, and
 `nextScheduledAt` for maintenance-loop visibility.
+
+For CI schedulers or backup hooks, call the API after the files are available
+on storage. The deployed service is protected by basic auth, so keep the
+credentials in the scheduler's secret store:
+
+```sh
+curl --fail --user "$CLASSY_USER:$CLASSY_PASSWORD" \
+  -X POST https://classy.api.apphor.de/api/scan
+```
+
+Poll the returned status endpoint when a completion check is needed:
+
+```sh
+curl --fail --user "$CLASSY_USER:$CLASSY_PASSWORD" \
+  https://classy.api.apphor.de/api/status
+```
 
 ## Database Tables
 

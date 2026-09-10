@@ -617,9 +617,10 @@ createServer(function (req, res) {
       ready.then(() => db.get('SELECT COUNT(*) AS total FROM file_locations')).then((count) => sendJson(res, 200, { ...scanStatus, total: Number(count?.total || 0) })).catch((error) => sendJson(res, 503, { error: error.message }));
       break;
     case 'POST /scan':
+    case 'POST /api/scan':
       ready.then(() => run());
       res.writeHead(202, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ message: 'Scanning started' }));
+      res.end(JSON.stringify({ message: 'Scanning started', statusUrl: '/api/status' }));
       break;
     case 'GET /status':
       res.writeHead(200, { 'Content-Type': 'application/json' });
