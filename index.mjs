@@ -127,6 +127,21 @@ async function initializeDatabase() {
   console.log('✅ Schema initialized successfully.');
 }
 
+async function initializeDatabaseWithRetry() {
+  let lastError;
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    try {
+      await initializeDatabase();
+      return;
+    } catch (error) {
+      lastError = error;
+      console.error(`⚠️ Database initialization attempt ${attempt}/5 failed:`, error.message);
+      if (attempt < 5) await new Promise((resolve) => setTimeout(resolve, 5000));
+    }
+  }
+  throw lastError;
+}
+
 /**
  * Helper to calculate a file's SHA-256 hash smoothly
  */
@@ -671,14 +686,11 @@ async function run() {
 
 // Master execution block
 async function main() {
-  await initializeDatabase();
+  await initializeDatabaseWithRetry();
   await bootstrapOllama();
 }
 
-const ready = main().catch((error) => {
-  scanStatus.lastError = error.message;
-  console.error(error);
-});
+const ready = main();
 ready.then(async () => {
   await run();
   scanStatus.nextScheduledAt = new Date(Date.now() + SCAN_INTERVAL_MS).toISOString();
@@ -686,6 +698,9 @@ ready.then(async () => {
     await run();
     scanStatus.nextScheduledAt = new Date(Date.now() + SCAN_INTERVAL_MS).toISOString();
   }, SCAN_INTERVAL_MS);
+}).catch((error) => {
+  scanStatus.lastError = error.message;
+  console.error(error);
 });
 
 createServer(function (req, res) {
