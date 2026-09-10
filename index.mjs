@@ -3,10 +3,10 @@ import path from 'path';
 import crypto from 'crypto';
 import { execFileSync } from 'child_process';
 import mime from 'mime-types';
-import exifParser from 'exif-parser';
 import console from 'console';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
+import { extractors } from './extractors/index.mjs';
 
 // Import your custom remote SQLite module
 let db;
@@ -100,6 +100,18 @@ async function initializeDatabase() {
       sha256 TEXT,
       file_path TEXT UNIQUE,
       file_size INTEGER
+    )
+  `);
+  await db.run(`
+    CREATE TABLE IF NOT EXISTS media_extractions (
+      sha256 TEXT NOT NULL,
+      extractor_id TEXT NOT NULL,
+      extractor_version INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      result_json TEXT,
+      error TEXT,
+      applied_at TEXT NOT NULL,
+      PRIMARY KEY (sha256, extractor_id)
     )
   `);
   await db.run(`CREATE INDEX IF NOT EXISTS idx_file_locations_sha256 ON file_locations (sha256)`);
@@ -266,109 +278,89 @@ async function processFile(filePath) {
   const fileName = path.basename(filePath);
   const stats = fs.statSync(filePath);
   const mimeType = mime.lookup(filePath) || '';
+  const type = mediaTypeFor(mimeType);
   const sha256 = getFileHash(filePath);
-
-  // Hash before deciding whether a path is already indexed so replacements are reprocessed.
   const existingPath = await db.get(`SELECT id, sha256 FROM file_locations WHERE file_path = ?`, [filePath]);
-  const existingSignature = await db.get(`SELECT sha256, llm_error, enrichment_version FROM media_signatures WHERE sha256 = ?`, [sha256]);
-  if (existingPath?.sha256 === sha256 && existingSignature && !existingSignature.llm_error && existingSignature.enrichment_version >= 1) return false;
+  const existingSignature = await db.get(`SELECT * FROM media_signatures WHERE sha256 = ?`, [sha256]);
+  const applicable = extractors.filter((extractor) => extractor.supports({ type, mimeType, filePath }));
+  const states = await getExtractionStates(sha256);
+  const complete = applicable.every((extractor) => states.get(extractor.id)?.status === 'success' && states.get(extractor.id).extractor_version === extractor.version);
 
+  if (existingPath?.sha256 === sha256 && existingSignature && complete) return false;
   console.log(`🔍 Scanning: ${fileName}`);
 
-  // Reuse metadata for duplicate content, but only write the location after it is known valid.
-  if (existingSignature && !existingSignature.llm_error && existingSignature.enrichment_version >= 1) {
-    await saveLocation(filePath, sha256, stats.size, existingPath);
-    console.log(`➡️ Duplicate content identified. Logged location and skipped deep analysis.`);
-    return true;
+  const fields = {
+    extractedDate: existingSignature?.extracted_date || stats.birthtime.toISOString(),
+    category: existingSignature?.ai_category || 'Unsorted',
+    summary: existingSignature?.ai_summary || 'No description available.',
+    tags: normalizeTags(parseMetadata(existingSignature?.ai_tags)),
+    rawMetadata: parseMetadata(existingSignature?.raw_metadata),
+    llmError: null,
+  };
+
+  for (const extractor of applicable) {
+    const state = states.get(extractor.id);
+    if (state?.status === 'success' && state.extractor_version === extractor.version) {
+      mergeExtractorFields(fields, parseMetadata(state.result_json).fields);
+      continue;
+    }
+    const result = await applyExtractor(extractor, {
+      type,
+      mimeType,
+      filePath,
+      fileName,
+      queryOllama,
+      extractVideoFrames,
+      runPythonExtractor,
+      visionModel: VISION_MODEL,
+      textModel: TEXT_MODEL,
+    }, sha256);
+    mergeExtractorFields(fields, result.fields);
+    if (result.error) fields.llmError = result.error;
   }
 
-  // Determine media category type
-  let type = 'unknown';
-  if (mimeType.startsWith('image/')) type = 'photo';
-  else if (mimeType.startsWith('video/')) type = 'video';
-  else if (mimeType.startsWith('audio/')) type = 'audio';
-  else if (mimeType === 'application/pdf') type = 'pdf';
-  else if (mimeType.includes('epub') || mimeType.includes('mobipocket')) type = 'ebook';
-
-  let extractedDate = stats.birthtime.toISOString();
-  let aiCategory = 'Unsorted';
-  let aiSummary = 'No description available.';
-  let aiTags = [];
-  let rawMeta = {};
-  let llmError = null;
-
-  // 4. Processing logic by file class
-  if (type === 'photo') {
-    try {
-      const buffer = fs.readFileSync(filePath);
-      const parser = exifParser.create(buffer);
-      const result = parser.parse();
-      rawMeta = result.tags;
-      if (result.tags.CreateDate) extractedDate = new Date(result.tags.CreateDate * 1000).toISOString();
-    } catch {}
-
-    const prompt = `Analyze this family/personal archive photo. Return valid JSON containing "category" (e.g., Travel, Family, Document, Event), a one-sentence "summary" describing the visual context, and "tags" as an array of 3-12 concise lowercase nouns or short phrases describing visible subjects, setting, activity, and mood (for example: animals, beach, family, sand). Do not invent names or locations.`;
-    const aiResult = await queryOllama(VISION_MODEL, prompt, filePath);
-    aiCategory = aiResult.category;
-    aiSummary = aiResult.summary;
-    aiTags = normalizeTags(aiResult.tags);
-    llmError = aiResult.error;
-  } else if (type === 'video') {
-    const singleCompositeFrame = extractVideoFrames(filePath);
-    if (singleCompositeFrame) {
-      const prompt = `This image consists of 3 sequential timeline frames extracted from a home/archive video. Analyze them and return valid JSON containing a broad "category", a one-sentence "summary" of what is happening in the video clip, and "tags" as an array of 3-12 concise lowercase nouns or short phrases describing visible subjects, setting, activity, and mood.`;
-      const aiResult = await queryOllama(VISION_MODEL, prompt, singleCompositeFrame);
-      aiCategory = aiResult.category;
-      aiSummary = aiResult.summary;
-      aiTags = normalizeTags(aiResult.tags);
-      llmError = aiResult.error;
-    }
-  } else if (type === 'audio') {
-    // Run local helper script for music
-    rawMeta = runPythonExtractor('extract_audio.py', filePath);
-    extractedDate = rawMeta.year || extractedDate;
-    aiCategory = rawMeta.genre || 'Music';
-    aiSummary = `${rawMeta.title || fileName} by ${rawMeta.artist || 'Unknown Artist'} (Album: ${rawMeta.album || 'Unknown Album'})`;
-    if (!rawMeta.genre) {
-      const prompt = `Infer the most likely music genre and style from this audio file's available filename and folder context. Do not claim certainty and do not invent an artist. Return valid JSON with "genre" (one concise genre), "style" (a concise descriptor), "category" (usually Music), "summary" (one sentence), and "tags" (3-8 lowercase genre or mood tags). Filename: "${fileName}". Path context: "${filePath}". Metadata: ${JSON.stringify(rawMeta)}.`;
-      const aiResult = await queryOllama(TEXT_MODEL, prompt);
-      aiCategory = aiResult.genre || aiResult.category || 'Music';
-      aiSummary = aiResult.summary || `${fileName} (genre inferred from filename and folder context)`;
-      aiTags = normalizeTags(aiResult.tags);
-      rawMeta.genre_source = 'llm-inferred-from-filename-and-folder-context';
-      if (aiResult.style) rawMeta.style = aiResult.style;
-      llmError = aiResult.error;
-    }
-  } else if (type === 'pdf' || type === 'ebook') {
-    rawMeta = runPythonExtractor('extract_doc.py', filePath);
-    extractedDate = rawMeta.date || extractedDate;
-
-    if (rawMeta.text_chunk) {
-      const prompt = `Analyze this text excerpt from a document/book titled "${rawMeta.title || fileName}". Return valid JSON containing a high-level classification "category" (e.g., Finance, Technical Manual, Novel, Receipt), a concise one-sentence "summary", and "tags" as an array of 3-12 concise lowercase topical keywords. Text: "${rawMeta.text_chunk.slice(0, 1500)}"`;
-      const aiResult = await queryOllama(TEXT_MODEL, prompt);
-      aiCategory = aiResult.category;
-      aiSummary = aiResult.summary;
-      aiTags = normalizeTags(aiResult.tags);
-      llmError = aiResult.error;
-      delete rawMeta.text_chunk; // Keep DB payload light
-    }
-  }
-
-  // Save the record
-  const signatureValues = [type, extractedDate, aiCategory, aiSummary, JSON.stringify(rawMeta), JSON.stringify(aiTags), 1, llmError];
+  const signatureValues = [type, fields.extractedDate, fields.category, fields.summary, JSON.stringify(fields.rawMetadata), JSON.stringify(normalizeTags(fields.tags)), 1, fields.llmError];
   if (existingSignature) {
-    await db.run(
-      `UPDATE media_signatures SET file_type = ?, extracted_date = ?, ai_category = ?, ai_summary = ?, raw_metadata = ?, ai_tags = ?, enrichment_version = ?, llm_error = ? WHERE sha256 = ?`,
-      [...signatureValues, sha256],
-    );
+    await db.run(`UPDATE media_signatures SET file_type = ?, extracted_date = ?, ai_category = ?, ai_summary = ?, raw_metadata = ?, ai_tags = ?, enrichment_version = ?, llm_error = ? WHERE sha256 = ?`, [...signatureValues, sha256]);
   } else {
-    await db.run(
-      `INSERT INTO media_signatures (sha256, file_type, extracted_date, ai_category, ai_summary, raw_metadata, ai_tags, enrichment_version, llm_error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [sha256, ...signatureValues],
-    );
+    await db.run(`INSERT INTO media_signatures (sha256, file_type, extracted_date, ai_category, ai_summary, raw_metadata, ai_tags, enrichment_version, llm_error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [sha256, ...signatureValues]);
   }
   await saveLocation(filePath, sha256, stats.size, existingPath);
   return true;
+}
+
+function mergeExtractorFields(target, source = {}) {
+  if (source.extractedDate) target.extractedDate = source.extractedDate;
+  if (source.category) target.category = source.category;
+  if (source.summary) target.summary = source.summary;
+  if (source.tags) target.tags = normalizeTags([...target.tags, ...source.tags]);
+  if (source.rawMetadata) target.rawMetadata = { ...target.rawMetadata, ...source.rawMetadata };
+  if (source.llmError) target.llmError = source.llmError;
+}
+
+async function getExtractionStates(sha256) {
+  const rows = await db.all(`SELECT * FROM media_extractions WHERE sha256 = ?`, [sha256]);
+  return new Map(rows.map((row) => [row.extractor_id, row]));
+}
+
+async function applyExtractor(extractor, context, sha256) {
+  try {
+    const result = await extractor.run(context);
+    const error = result.fields?.llmError || null;
+    await saveExtraction(sha256, extractor, error ? 'error' : 'success', result, error);
+    return { fields: result.fields || {}, error };
+  } catch (error) {
+    await saveExtraction(sha256, extractor, 'error', { fields: {} }, error.message);
+    return { fields: {}, error: error.message };
+  }
+}
+
+async function saveExtraction(sha256, extractor, status, result, error) {
+  await db.run(`DELETE FROM media_extractions WHERE sha256 = ? AND extractor_id = ?`, [sha256, extractor.id]);
+  await db.run(
+    `INSERT INTO media_extractions (sha256, extractor_id, extractor_version, status, result_json, error, applied_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [sha256, extractor.id, extractor.version, status, JSON.stringify(result), error, new Date().toISOString()],
+  );
 }
 
 async function saveLocation(filePath, sha256, fileSize, existingPath) {
@@ -445,6 +437,15 @@ function normalizeTags(value) {
     .filter(Boolean))].slice(0, 30);
 }
 
+function mediaTypeFor(mimeType) {
+  if (mimeType.startsWith('image/')) return 'photo';
+  if (mimeType.startsWith('video/')) return 'video';
+  if (mimeType.startsWith('audio/')) return 'audio';
+  if (mimeType === 'application/pdf') return 'pdf';
+  if (mimeType.includes('epub') || mimeType.includes('mobipocket')) return 'ebook';
+  return 'unknown';
+}
+
 function serializeMedia(row) {
   const metadata = parseMetadata(row.raw_metadata);
   return {
@@ -488,7 +489,7 @@ async function listMedia(url) {
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const rows = await db.all(
     `
-      SELECT l.id, l.file_path, l.file_size, s.file_type, s.extracted_date,
+      SELECT l.id, l.sha256, l.file_path, l.file_size, s.file_type, s.extracted_date,
              s.ai_category, s.ai_summary, s.raw_metadata, s.ai_tags, s.llm_error
       FROM file_locations l
       LEFT JOIN media_signatures s ON s.sha256 = l.sha256
@@ -518,7 +519,7 @@ async function listMedia(url) {
 async function getMedia(id) {
   return db.get(
     `
-      SELECT l.id, l.file_path, l.file_size, s.file_type, s.extracted_date,
+      SELECT l.id, l.sha256, l.file_path, l.file_size, s.file_type, s.extracted_date,
              s.ai_category, s.ai_summary, s.raw_metadata, s.ai_tags, s.llm_error
       FROM file_locations l
       LEFT JOIN media_signatures s ON s.sha256 = l.sha256
@@ -526,6 +527,20 @@ async function getMedia(id) {
     `,
     [id],
   );
+}
+
+async function getExtractorStatus(sha256) {
+  const rows = await db.all(
+    `SELECT extractor_id, extractor_version, status, error, applied_at FROM media_extractions WHERE sha256 = ? ORDER BY extractor_id`,
+    [sha256],
+  );
+  return rows.map((row) => ({
+    id: row.extractor_id,
+    version: row.extractor_version,
+    status: row.status,
+    error: row.error || null,
+    appliedAt: row.applied_at,
+  }));
 }
 
 function sendJson(res, status, value) {
@@ -561,6 +576,7 @@ const openApiDocument = {
           summary: { type: 'string' },
           tags: { type: 'array', items: { type: 'string' } },
           llmError: { type: ['string', 'null'] },
+          extractors: { type: 'array', items: { type: 'object' } },
           metadata: { type: 'object', additionalProperties: true },
           contentUrl: { type: 'string' },
         },
@@ -715,7 +731,11 @@ createServer(function (req, res) {
 
   const mediaDetailMatch = /^GET \/api\/media\/(\d+)$/.exec(route);
   if (mediaDetailMatch) {
-    ready.then(() => getMedia(mediaDetailMatch[1])).then((row) => row ? sendJson(res, 200, serializeMedia(row)) : sendJson(res, 404, { error: 'Media not found' })).catch((error) => sendJson(res, 503, { error: error.message }));
+    ready.then(async () => {
+      const row = await getMedia(mediaDetailMatch[1]);
+      if (!row) return sendJson(res, 404, { error: 'Media not found' });
+      return sendJson(res, 200, { ...serializeMedia(row), extractors: await getExtractorStatus(row.sha256) });
+    }).catch((error) => sendJson(res, 503, { error: error.message }));
     return;
   }
 
@@ -751,11 +771,6 @@ createServer(function (req, res) {
       res.writeHead(202, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ message: 'Scanning started', statusUrl: '/api/status' }));
       break;
-    case 'GET /status':
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(scanStatus));
-      break;
-
     default:
       res.end('OK');
   }

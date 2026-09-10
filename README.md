@@ -139,6 +139,41 @@ browser.
 The status response includes `removed`, `lastPrunedAt`, and
 `nextScheduledAt` for maintenance-loop visibility.
 
+## Extractor Architecture
+
+Metadata consumers live in `extractors/` and implement the same module hook:
+
+```js
+export default {
+  id: 'my-extractor',
+  version: 1,
+  supports: ({ type, mimeType, filePath }) => type === 'photo',
+  async run(context) {
+    return { fields: { rawMetadata: {}, tags: [] } };
+  },
+};
+```
+
+The context provides the file information plus shared `queryOllama`,
+`runPythonExtractor`, and `extractVideoFrames` hooks. A module should return
+`fields` using the existing media fields, such as `rawMetadata`,
+`extractedDate`, `category`, `summary`, `tags`, and `llmError`.
+
+Current extractors are:
+
+- `image-exif`: local EXIF metadata and capture date
+- `vision-classification`: image/video category, summary, and descriptive tags
+- `audio-metadata`: ID3 metadata plus conditional genre/style inference
+- `document-classification`: document metadata, summary, and topical tags
+
+Applied results are tracked in `media_extractions` by file SHA-256, extractor
+ID, version, status, result, error, and timestamp. A scan runs only missing or
+outdated extractors; failed extractors remain retryable. Add a new module to
+`extractors/index.mjs` and it will be applied on the next scan without resetting
+existing media records.
+
+`GET /api/media/:id` also returns the per-file `extractors` status list.
+
 For CI schedulers or backup hooks, call the API after the files are available
 on storage. The deployed service is protected by basic auth, so keep the
 credentials in the scheduler's secret store:
