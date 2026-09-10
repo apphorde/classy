@@ -97,6 +97,20 @@ The `Procfile` defines two process types:
 - `web`: starts the HTTP health process
 - `indexer`: performs one indexing pass
 
+## Deployment
+
+The deployed health endpoint is available at:
+
+<https://classy.api.apphor.de>
+
+Check the deployment with:
+
+```sh
+curl https://classy.api.apphor.de
+```
+
+The expected response is `OK`.
+
 ## Database Tables
 
 ### `media_signatures`
