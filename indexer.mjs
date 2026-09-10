@@ -22,7 +22,7 @@ if (!DB_URL) {
   process.exit(1);
 }
 
-if (!OLLAMA_API_URL) {
+if (!OLLAMA_URL) {
   console.log('Set OLLAMA_URL first!');
   process.exit(1);
 }
