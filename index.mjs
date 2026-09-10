@@ -200,7 +200,7 @@ async function queryOllama(model, prompt, imagePath = null) {
     model: model,
     messages: [{ role: 'user', content: prompt }],
     stream: false,
-    options: { temperature: 0.2 },
+    ...(openAiCompatible ? { temperature: 0.2 } : { options: { temperature: 0.2 } }),
     ...(openAiCompatible ? { response_format: { type: 'json_object' } } : { format: 'json' }),
   };
 
@@ -210,7 +210,7 @@ async function queryOllama(model, prompt, imagePath = null) {
   }
 
   try {
-    const chatUrl = openAiCompatible ? new URL('chat', `${ollamaUrl.toString().replace(/\/$/, '')}/`) : new URL('/api/chat', ollamaUrl);
+    const chatUrl = openAiCompatible ? new URL('chat/completions', `${ollamaUrl.toString().replace(/\/$/, '')}/`) : new URL('/api/chat', ollamaUrl);
     const res = await fetch(chatUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -218,7 +218,9 @@ async function queryOllama(model, prompt, imagePath = null) {
     });
     if (!res.ok) throw new Error(`Ollama returned HTTP ${res.status}`);
     const json = await res.json();
-    return { ...JSON.parse(json.message.content), error: null };
+    const content = openAiCompatible ? json.choices?.[0]?.message?.content : json.message?.content;
+    if (!content) throw new Error('Ollama response did not contain message content');
+    return { ...JSON.parse(content), error: null };
   } catch (err) {
     return { category: 'Unknown', summary: 'Failed to classify via LLM', error: err.message };
   }
