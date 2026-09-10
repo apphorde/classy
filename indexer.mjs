@@ -11,7 +11,7 @@ import console from 'console';
 let db;
 
 // Configuration (Pull from environment variables passed to Docker container)
-const OLLAMA_URL = process.env.OLLAMA_API_URL;
+const OLLAMA_URL = process.env.OLLAMA_URL;
 const SCAN_DIR = join(process.cwd(), 'data');
 const VISION_MODEL = process.env.VISION_MODEL || 'qwen2.5-vl:7b';
 const TEXT_MODEL = process.env.TEXT_MODEL || 'gemma2:27b';
@@ -19,6 +19,11 @@ const DB_URL = process.env.DATABASE_URL;
 
 if (!DB_URL) {
   console.log('Set DATABASE_URL first!');
+  process.exit(1);
+}
+
+if (!OLLAMA_API_URL) {
+  console.log('Set OLLAMA_URL first!');
   process.exit(1);
 }
 
