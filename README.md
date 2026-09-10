@@ -127,12 +127,12 @@ browser.
 
 ### Media API
 
+- `GET /api`: OpenAPI 3.1 JSON specification for third-party consumers.
 - `GET /api/media`: paginated indexed media. Supports `search`, `type`, `category`, `limit`, and `offset`.
 - `GET /api/media/:id`: full metadata for one indexed file.
 - `GET /api/media/:id/content`: stream the original file, including byte ranges for video and audio playback.
 - `GET /api/status`: scan counters and the current index location.
 - `POST /api/scan`: trigger a new scan and return immediately with `202`.
-- `POST /scan`: backwards-compatible alias for the scan trigger.
 
 The status response includes `removed`, `lastPrunedAt`, and
 `nextScheduledAt` for maintenance-loop visibility.

@@ -482,6 +482,80 @@ function sendJson(res, status, value) {
   res.end(JSON.stringify(value));
 }
 
+const openApiDocument = {
+  openapi: '3.1.0',
+  info: {
+    title: 'Classy Archive API',
+    version: '1.0.0',
+    description: 'Read indexed private media and trigger background archive scans.',
+  },
+  servers: [{ url: 'https://classy.api.apphor.de' }],
+  security: [{ basicAuth: [] }],
+  components: {
+    securitySchemes: {
+      basicAuth: { type: 'http', scheme: 'basic' },
+    },
+    schemas: {
+      Media: {
+        type: 'object',
+        required: ['id', 'name', 'size', 'type', 'category', 'contentUrl'],
+        properties: {
+          id: { type: 'integer' },
+          name: { type: 'string' },
+          relativePath: { type: 'string' },
+          size: { type: 'integer' },
+          type: { type: 'string', enum: ['photo', 'video', 'audio', 'pdf', 'ebook', 'unknown'] },
+          date: { type: ['string', 'null'], format: 'date-time' },
+          category: { type: 'string' },
+          summary: { type: 'string' },
+          llmError: { type: ['string', 'null'] },
+          metadata: { type: 'object', additionalProperties: true },
+          contentUrl: { type: 'string' },
+        },
+      },
+    },
+  },
+  paths: {
+    '/api': {
+      get: { summary: 'Get this OpenAPI document', security: [], responses: { 200: { description: 'OpenAPI 3.1 document' } } },
+    },
+    '/api/media': {
+      get: {
+        summary: 'List indexed media',
+        parameters: [
+          { name: 'search', in: 'query', schema: { type: 'string' } },
+          { name: 'type', in: 'query', schema: { type: 'string' } },
+          { name: 'category', in: 'query', schema: { type: 'string' } },
+          { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 48 } },
+          { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0, default: 0 } },
+        ],
+        responses: { 200: { description: 'Paginated media list' } },
+      },
+    },
+    '/api/media/{id}': {
+      get: {
+        summary: 'Get media metadata',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+        responses: { 200: { description: 'Media record', content: { 'application/json': { schema: { $ref: '#/components/schemas/Media' } } } }, 404: { description: 'Media not found' } },
+      },
+    },
+    '/api/media/{id}/content': {
+      get: {
+        summary: 'Stream original media',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }, { name: 'Range', in: 'header', schema: { type: 'string' } }],
+        responses: { 200: { description: 'Media bytes' }, 206: { description: 'Partial media bytes' }, 404: { description: 'Media not found' } },
+      },
+      head: { summary: 'Inspect media headers', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { 200: { description: 'Media headers' } } },
+    },
+    '/api/status': {
+      get: { summary: 'Get scan status', responses: { 200: { description: 'Current scan and maintenance counters' } } },
+    },
+    '/api/scan': {
+      post: { summary: 'Trigger a background scan', responses: { 202: { description: 'Scan accepted' } } },
+    },
+  },
+};
+
 async function serveMediaContent(req, res, id) {
   const row = await getMedia(id);
   if (!row) return sendJson(res, 404, { error: 'Media not found' });
@@ -594,6 +668,10 @@ createServer(function (req, res) {
   }
 
   switch (route) {
+    case 'GET /api':
+    case 'GET /api/':
+      sendJson(res, 200, openApiDocument);
+      break;
     case 'GET /':
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(fs.readFileSync(path.join(SCRIPT_DIR, 'public/index.html')));
@@ -616,7 +694,6 @@ createServer(function (req, res) {
     case 'GET /api/status':
       ready.then(() => db.get('SELECT COUNT(*) AS total FROM file_locations')).then((count) => sendJson(res, 200, { ...scanStatus, total: Number(count?.total || 0) })).catch((error) => sendJson(res, 503, { error: error.message }));
       break;
-    case 'POST /scan':
     case 'POST /api/scan':
       ready.then(() => run());
       res.writeHead(202, { 'Content-Type': 'application/json' });
