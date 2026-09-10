@@ -32,12 +32,12 @@ if (!OLLAMA_URL) {
  */
 async function bootstrapOllama() {
   const models = [VISION_MODEL, TEXT_MODEL];
-  const baseUrl = OLLAMA_URL.endsWith('/v1') ? OLLAMA_URL.slice(0, -3) : OLLAMA_URL;
+  const baseUrl = new URL(OLLAMA_URL.endsWith('/v1') ? OLLAMA_URL.slice(0, -3) : OLLAMA_URL);
 
   for (const model of models) {
     console.log(`📡 Checking remote Ollama for model: ${model}...`);
     try {
-      const response = await fetch(`${baseUrl}/api/pull`, {
+      const response = await fetch(new URL(`/api/pull`, baseUrl), {
         method: 'POST',
         body: JSON.stringify({ name: model, stream: false }),
       });
@@ -46,11 +46,9 @@ async function bootstrapOllama() {
         console.log(`✅ Model ${model} is ready and verified.`);
       } else {
         console.error(`⚠️ Failed to pull model ${model}:`, await response.text());
-        process.exit(1);
       }
     } catch (err) {
       console.error(`❌ Error communicating with Ollama endpoint:`, err.message);
-      process.exit(1);
     }
   }
 }
