@@ -142,6 +142,7 @@ Stores one classification record per unique SHA-256 file content:
 - `ai_category`: broad classification
 - `ai_summary`: generated description
 - `raw_metadata`: JSON-encoded extractor metadata
+- `llm_error`: Ollama or response-parsing error when classification fails
 
 ### `file_locations`
 
@@ -169,6 +170,8 @@ entire scan.
   re-scan.
 - Duplicate content is classified once; additional paths only receive a
   location record.
+- Failed LLM classifications retain their error reason in `llm_error` and are
+  retried on the next scan.
 - Video processing creates temporary frame files under `/tmp/frames`.
 - The Ollama model pull step can take significant time, especially for the
   default 27B text model.

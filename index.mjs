@@ -82,7 +82,8 @@ async function initializeDatabase() {
       extracted_date TEXT,
       ai_category TEXT,
       ai_summary TEXT,
-      raw_metadata TEXT
+      raw_metadata TEXT,
+      llm_error TEXT
     )
   `);
 
@@ -95,6 +96,16 @@ async function initializeDatabase() {
     )
   `);
   await db.run(`CREATE INDEX IF NOT EXISTS idx_file_locations_sha256 ON file_locations (sha256)`);
+  try {
+    await db.run(`ALTER TABLE media_signatures ADD COLUMN llm_error TEXT`);
+  } catch {
+    // Existing installations already have this column.
+  }
+  await db.run(`
+    UPDATE media_signatures
+    SET llm_error = 'Legacy classification failure; the original reason was not captured.'
+    WHERE ai_summary = 'Failed to classify via LLM' AND (llm_error IS NULL OR llm_error = '')
+  `);
   console.log('✅ Schema initialized successfully.');
 }
 
@@ -207,9 +218,9 @@ async function queryOllama(model, prompt, imagePath = null) {
     });
     if (!res.ok) throw new Error(`Ollama returned HTTP ${res.status}`);
     const json = await res.json();
-    return JSON.parse(json.message.content);
+    return { ...JSON.parse(json.message.content), error: null };
   } catch (err) {
-    return { category: 'Unknown', summary: 'Failed to classify via LLM' };
+    return { category: 'Unknown', summary: 'Failed to classify via LLM', error: err.message };
   }
 }
 
@@ -224,8 +235,8 @@ async function processFile(filePath) {
 
   // Hash before deciding whether a path is already indexed so replacements are reprocessed.
   const existingPath = await db.get(`SELECT id, sha256 FROM file_locations WHERE file_path = ?`, [filePath]);
-  const existingSignature = await db.get(`SELECT sha256 FROM media_signatures WHERE sha256 = ?`, [sha256]);
-  if (existingPath?.sha256 === sha256 && existingSignature) return false;
+  const existingSignature = await db.get(`SELECT sha256, llm_error FROM media_signatures WHERE sha256 = ?`, [sha256]);
+  if (existingPath?.sha256 === sha256 && existingSignature && !existingSignature.llm_error) return false;
 
   console.log(`🔍 Scanning: ${fileName}`);
 
@@ -248,6 +259,7 @@ async function processFile(filePath) {
   let aiCategory = 'Unsorted';
   let aiSummary = 'No description available.';
   let rawMeta = {};
+  let llmError = null;
 
   // 4. Processing logic by file class
   if (type === 'photo') {
@@ -263,6 +275,7 @@ async function processFile(filePath) {
     const aiResult = await queryOllama(VISION_MODEL, prompt, filePath);
     aiCategory = aiResult.category;
     aiSummary = aiResult.summary;
+    llmError = aiResult.error;
   } else if (type === 'video') {
     const singleCompositeFrame = extractVideoFrames(filePath);
     if (singleCompositeFrame) {
@@ -270,6 +283,7 @@ async function processFile(filePath) {
       const aiResult = await queryOllama(VISION_MODEL, prompt, singleCompositeFrame);
       aiCategory = aiResult.category;
       aiSummary = aiResult.summary;
+      llmError = aiResult.error;
     }
   } else if (type === 'audio') {
     // Run local helper script for music
@@ -286,18 +300,24 @@ async function processFile(filePath) {
       const aiResult = await queryOllama(TEXT_MODEL, prompt);
       aiCategory = aiResult.category;
       aiSummary = aiResult.summary;
+      llmError = aiResult.error;
       delete rawMeta.text_chunk; // Keep DB payload light
     }
   }
 
   // Save the record
-  await db.run(
-    `
-    INSERT INTO media_signatures (sha256, file_type, extracted_date, ai_category, ai_summary, raw_metadata)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `,
-    [sha256, type, extractedDate, aiCategory, aiSummary, JSON.stringify(rawMeta)],
-  );
+  const signatureValues = [type, extractedDate, aiCategory, aiSummary, JSON.stringify(rawMeta), llmError];
+  if (existingSignature) {
+    await db.run(
+      `UPDATE media_signatures SET file_type = ?, extracted_date = ?, ai_category = ?, ai_summary = ?, raw_metadata = ?, llm_error = ? WHERE sha256 = ?`,
+      [...signatureValues, sha256],
+    );
+  } else {
+    await db.run(
+      `INSERT INTO media_signatures (sha256, file_type, extracted_date, ai_category, ai_summary, raw_metadata, llm_error) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [sha256, ...signatureValues],
+    );
+  }
   await saveLocation(filePath, sha256, stats.size, existingPath);
   return true;
 }
@@ -360,6 +380,7 @@ function serializeMedia(row) {
     date: row.extracted_date || null,
     category: row.ai_category || 'Unsorted',
     summary: row.ai_summary || '',
+    llmError: row.llm_error || null,
     metadata,
     contentUrl: `/api/media/${row.id}/content`,
   };
@@ -391,7 +412,7 @@ async function listMedia(url) {
   const rows = await db.all(
     `
       SELECT l.id, l.file_path, l.file_size, s.file_type, s.extracted_date,
-             s.ai_category, s.ai_summary, s.raw_metadata
+             s.ai_category, s.ai_summary, s.raw_metadata, s.llm_error
       FROM file_locations l
       LEFT JOIN media_signatures s ON s.sha256 = l.sha256
       ${where}
@@ -421,7 +442,7 @@ async function getMedia(id) {
   return db.get(
     `
       SELECT l.id, l.file_path, l.file_size, s.file_type, s.extracted_date,
-             s.ai_category, s.ai_summary, s.raw_metadata
+             s.ai_category, s.ai_summary, s.raw_metadata, s.llm_error
       FROM file_locations l
       LEFT JOIN media_signatures s ON s.sha256 = l.sha256
       WHERE l.id = ?
