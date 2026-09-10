@@ -85,7 +85,9 @@ The root endpoint responds with `OK`.
 ## Docker
 
 The included Dockerfile installs Node.js dependencies, Python dependencies,
-and FFmpeg. Build and run it with a mounted media directory and the required
+FFmpeg, and the Debian runtime equivalent of the Cloud CLI Node image. It
+copies `/home/node` directly from the upstream image so the Cloud CLI hooks and
+entrypoint stay synchronized with upstream. Build and run it with a mounted media directory and the required
 environment variables:
 
 ```sh
@@ -164,6 +166,7 @@ Stores one classification record per unique SHA-256 file content:
 - `extracted_date`: file or embedded metadata date
 - `ai_category`: broad classification
 - `ai_summary`: generated description
+- `ai_tags`: JSON array of descriptive tags generated from images, videos, and document text
 - `raw_metadata`: JSON-encoded extractor metadata
 - `llm_error`: Ollama or response-parsing error when classification fails
 
@@ -182,6 +185,10 @@ Stores every indexed path:
   and album names inferred from parent directories.
 - `extract_doc.py` reads the first two PDF pages or the first EPUB document
   contents and returns a text excerpt for classification.
+
+When audio has no ID3 genre, the text model infers a likely genre, style, and
+tags from the filename, folder context, and any remaining audio metadata. It
+does not analyze the audio waveform.
 
 Extractor failures are returned as empty metadata rather than stopping the
 entire scan.

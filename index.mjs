@@ -88,6 +88,7 @@ async function initializeDatabase() {
       ai_category TEXT,
       ai_summary TEXT,
       raw_metadata TEXT,
+      ai_tags TEXT,
       llm_error TEXT
     )
   `);
@@ -106,6 +107,12 @@ async function initializeDatabase() {
   } catch {
     // Existing installations already have this column.
   }
+  try {
+    await db.run(`ALTER TABLE media_signatures ADD COLUMN ai_tags TEXT`);
+  } catch {
+    // Existing installations already have this column.
+  }
+  await db.run(`UPDATE media_signatures SET ai_tags = '[]' WHERE ai_tags IS NULL OR ai_tags = ''`);
   await db.run(`
     UPDATE media_signatures
     SET llm_error = 'Legacy classification failure; the original reason was not captured.'
@@ -265,6 +272,7 @@ async function processFile(filePath) {
   let extractedDate = stats.birthtime.toISOString();
   let aiCategory = 'Unsorted';
   let aiSummary = 'No description available.';
+  let aiTags = [];
   let rawMeta = {};
   let llmError = null;
 
@@ -278,18 +286,20 @@ async function processFile(filePath) {
       if (result.tags.CreateDate) extractedDate = new Date(result.tags.CreateDate * 1000).toISOString();
     } catch {}
 
-    const prompt = `Analyze this family/personal archive photo. Return valid JSON containing "category" (e.g., Travel, Family, Document, Event) and a one-sentence "summary" describing the visual context.`;
+    const prompt = `Analyze this family/personal archive photo. Return valid JSON containing "category" (e.g., Travel, Family, Document, Event), a one-sentence "summary" describing the visual context, and "tags" as an array of 3-12 concise lowercase nouns or short phrases describing visible subjects, setting, activity, and mood (for example: animals, beach, family, sand). Do not invent names or locations.`;
     const aiResult = await queryOllama(VISION_MODEL, prompt, filePath);
     aiCategory = aiResult.category;
     aiSummary = aiResult.summary;
+    aiTags = normalizeTags(aiResult.tags);
     llmError = aiResult.error;
   } else if (type === 'video') {
     const singleCompositeFrame = extractVideoFrames(filePath);
     if (singleCompositeFrame) {
-      const prompt = `This image consists of 3 sequential timeline frames extracted from a home/archive video. Analyze them and return valid JSON containing a broad "category" and a one-sentence "summary" of what is happening in the video clip.`;
+      const prompt = `This image consists of 3 sequential timeline frames extracted from a home/archive video. Analyze them and return valid JSON containing a broad "category", a one-sentence "summary" of what is happening in the video clip, and "tags" as an array of 3-12 concise lowercase nouns or short phrases describing visible subjects, setting, activity, and mood.`;
       const aiResult = await queryOllama(VISION_MODEL, prompt, singleCompositeFrame);
       aiCategory = aiResult.category;
       aiSummary = aiResult.summary;
+      aiTags = normalizeTags(aiResult.tags);
       llmError = aiResult.error;
     }
   } else if (type === 'audio') {
@@ -298,30 +308,41 @@ async function processFile(filePath) {
     extractedDate = rawMeta.year || extractedDate;
     aiCategory = rawMeta.genre || 'Music';
     aiSummary = `${rawMeta.title || fileName} by ${rawMeta.artist || 'Unknown Artist'} (Album: ${rawMeta.album || 'Unknown Album'})`;
+    if (!rawMeta.genre) {
+      const prompt = `Infer the most likely music genre and style from this audio file's available filename and folder context. Do not claim certainty and do not invent an artist. Return valid JSON with "genre" (one concise genre), "style" (a concise descriptor), "category" (usually Music), "summary" (one sentence), and "tags" (3-8 lowercase genre or mood tags). Filename: "${fileName}". Path context: "${filePath}". Metadata: ${JSON.stringify(rawMeta)}.`;
+      const aiResult = await queryOllama(TEXT_MODEL, prompt);
+      aiCategory = aiResult.genre || aiResult.category || 'Music';
+      aiSummary = aiResult.summary || `${fileName} (genre inferred from filename and folder context)`;
+      aiTags = normalizeTags(aiResult.tags);
+      rawMeta.genre_source = 'llm-inferred-from-filename-and-folder-context';
+      if (aiResult.style) rawMeta.style = aiResult.style;
+      llmError = aiResult.error;
+    }
   } else if (type === 'pdf' || type === 'ebook') {
     rawMeta = runPythonExtractor('extract_doc.py', filePath);
     extractedDate = rawMeta.date || extractedDate;
 
     if (rawMeta.text_chunk) {
-      const prompt = `Analyze this text excerpt from a document/book titled "${rawMeta.title || fileName}". Return valid JSON containing a high-level classification "category" (e.g., Finance, Technical Manual, Novel, Receipt) and a concise one-sentence "summary". Text: "${rawMeta.text_chunk.slice(0, 1500)}"`;
+      const prompt = `Analyze this text excerpt from a document/book titled "${rawMeta.title || fileName}". Return valid JSON containing a high-level classification "category" (e.g., Finance, Technical Manual, Novel, Receipt), a concise one-sentence "summary", and "tags" as an array of 3-12 concise lowercase topical keywords. Text: "${rawMeta.text_chunk.slice(0, 1500)}"`;
       const aiResult = await queryOllama(TEXT_MODEL, prompt);
       aiCategory = aiResult.category;
       aiSummary = aiResult.summary;
+      aiTags = normalizeTags(aiResult.tags);
       llmError = aiResult.error;
       delete rawMeta.text_chunk; // Keep DB payload light
     }
   }
 
   // Save the record
-  const signatureValues = [type, extractedDate, aiCategory, aiSummary, JSON.stringify(rawMeta), llmError];
+  const signatureValues = [type, extractedDate, aiCategory, aiSummary, JSON.stringify(rawMeta), JSON.stringify(aiTags), llmError];
   if (existingSignature) {
     await db.run(
-      `UPDATE media_signatures SET file_type = ?, extracted_date = ?, ai_category = ?, ai_summary = ?, raw_metadata = ?, llm_error = ? WHERE sha256 = ?`,
+      `UPDATE media_signatures SET file_type = ?, extracted_date = ?, ai_category = ?, ai_summary = ?, raw_metadata = ?, ai_tags = ?, llm_error = ? WHERE sha256 = ?`,
       [...signatureValues, sha256],
     );
   } else {
     await db.run(
-      `INSERT INTO media_signatures (sha256, file_type, extracted_date, ai_category, ai_summary, raw_metadata, llm_error) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO media_signatures (sha256, file_type, extracted_date, ai_category, ai_summary, raw_metadata, ai_tags, llm_error) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [sha256, ...signatureValues],
     );
   }
@@ -395,6 +416,14 @@ function parseMetadata(value) {
   }
 }
 
+function normalizeTags(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value
+    .filter((tag) => typeof tag === 'string')
+    .map((tag) => tag.trim().toLowerCase())
+    .filter(Boolean))].slice(0, 30);
+}
+
 function serializeMedia(row) {
   const metadata = parseMetadata(row.raw_metadata);
   return {
@@ -406,6 +435,7 @@ function serializeMedia(row) {
     date: row.extracted_date || null,
     category: row.ai_category || 'Unsorted',
     summary: row.ai_summary || '',
+    tags: normalizeTags(parseMetadata(row.ai_tags)),
     llmError: row.llm_error || null,
     metadata,
     contentUrl: `/api/media/${row.id}/content`,
@@ -438,7 +468,7 @@ async function listMedia(url) {
   const rows = await db.all(
     `
       SELECT l.id, l.file_path, l.file_size, s.file_type, s.extracted_date,
-             s.ai_category, s.ai_summary, s.raw_metadata, s.llm_error
+             s.ai_category, s.ai_summary, s.raw_metadata, s.ai_tags, s.llm_error
       FROM file_locations l
       LEFT JOIN media_signatures s ON s.sha256 = l.sha256
       ${where}
@@ -468,7 +498,7 @@ async function getMedia(id) {
   return db.get(
     `
       SELECT l.id, l.file_path, l.file_size, s.file_type, s.extracted_date,
-             s.ai_category, s.ai_summary, s.raw_metadata, s.llm_error
+             s.ai_category, s.ai_summary, s.raw_metadata, s.ai_tags, s.llm_error
       FROM file_locations l
       LEFT JOIN media_signatures s ON s.sha256 = l.sha256
       WHERE l.id = ?
@@ -508,6 +538,7 @@ const openApiDocument = {
           date: { type: ['string', 'null'], format: 'date-time' },
           category: { type: 'string' },
           summary: { type: 'string' },
+          tags: { type: 'array', items: { type: 'string' } },
           llmError: { type: ['string', 'null'] },
           metadata: { type: 'object', additionalProperties: true },
           contentUrl: { type: 'string' },
