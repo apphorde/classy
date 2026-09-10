@@ -1,6 +1,7 @@
 FROM ghcr.io/cloud-cli/image-node:latest
 
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
+USER 0
 RUN apk add --no-cache ffmpeg
 COPY . .
 RUN pnpm install
