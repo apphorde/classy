@@ -1,6 +1,7 @@
 {
   "name": "media-classifier-loop",
   "version": "1.0.0",
+  "private": true,
   "type": "module",
   "description": "Autonomous media classification loop via remote Ollama and HTTPS SQLite wrapper",
   "main": "index.mjs",
