@@ -37,8 +37,6 @@ const scanStatus = {
   nextScheduledAt: null,
   lastError: null,
 };
-let cancelRequested = false;
-let clearVisionAfterScan = false;
 
 if (!DB_URL) {
   console.log('Set DATABASE_URL first!');
@@ -298,7 +296,6 @@ async function queryOllama(model, prompt, imagePath = null) {
  * Core processor for single items
  */
 async function processFile(filePath) {
-  if (cancelRequested) throw new Error('Scan cancelled by maintenance request');
   const fileName = path.basename(filePath);
   const stats = fs.statSync(filePath);
   const mimeType = mime.lookup(filePath) || '';
@@ -308,7 +305,7 @@ async function processFile(filePath) {
   const existingSignature = await db.get(`SELECT * FROM media_signatures WHERE sha256 = ?`, [sha256]);
   const applicable = extractors.filter((extractor) => extractor.supports({ type, mimeType, filePath }));
   const states = await getExtractionStates(sha256);
-  const complete = applicable.every((extractor) => ['success', 'reset'].includes(states.get(extractor.id)?.status) && states.get(extractor.id).extractor_version === extractor.version);
+  const complete = applicable.every((extractor) => states.get(extractor.id)?.status === 'success' && states.get(extractor.id).extractor_version === extractor.version);
 
   if (existingPath?.sha256 === sha256 && existingSignature && complete) return false;
   console.log(`🔍 Scanning: ${fileName}`);
@@ -324,7 +321,7 @@ async function processFile(filePath) {
 
   for (const extractor of applicable) {
     const state = states.get(extractor.id);
-    if (['success', 'reset'].includes(state?.status) && state.extractor_version === extractor.version) {
+    if (state?.status === 'success' && state.extractor_version === extractor.version) {
       mergeExtractorFields(fields, parseMetadata(state.result_json).fields);
       continue;
     }
@@ -430,7 +427,6 @@ async function startCrawling(dir) {
         }
         else scanStatus.skipped += 1;
       } catch (error) {
-        if (error.message === 'Scan cancelled by maintenance request') throw error;
         scanStatus.failed += 1;
         scanStatus.lastError = `${fullPath}: ${error.message}`;
         console.error(`⚠️ Failed to index ${fullPath}:`, error.message);
@@ -592,19 +588,30 @@ async function getFaceSummary(sha256) {
   }));
 }
 
-async function resetVisionClassifications() {
-  await db.run(`
-    UPDATE media_signatures
-    SET ai_category = 'Unsorted', ai_summary = 'No description available.', ai_tags = '[]', llm_error = NULL, enrichment_version = 0
-    WHERE file_type IN ('photo', 'video')
-  `);
-  await db.run(`DELETE FROM media_extractions WHERE extractor_id = 'vision-classification'`);
-  await db.run(`
-    INSERT INTO media_extractions (sha256, extractor_id, extractor_version, status, result_json, error, applied_at)
-    SELECT sha256, 'vision-classification', 3, 'reset', NULL, NULL, ?
-    FROM media_signatures
-    WHERE file_type IN ('photo', 'video')
-  `, [new Date().toISOString()]);
+async function resetMedia(row, extractorId = null) {
+  const applicable = extractors.filter((extractor) => extractor.supports({ type: row.file_type, filePath: row.file_path }));
+  const selected = extractorId ? applicable.filter((extractor) => extractor.id === extractorId) : applicable;
+  if (extractorId && selected.length === 0) throw new Error(`Extractor does not apply to this file: ${extractorId}`);
+
+  if (!extractorId) {
+    await db.run(`DELETE FROM face_embeddings WHERE sha256 = ?`, [row.sha256]);
+    await db.run(`UPDATE media_signatures SET extracted_date = NULL, ai_category = 'Unsorted', ai_summary = 'No description available.', raw_metadata = '{}', ai_tags = '[]', llm_error = NULL, enrichment_version = 0 WHERE sha256 = ?`, [row.sha256]);
+    await db.run(`DELETE FROM media_extractions WHERE sha256 = ?`, [row.sha256]);
+  } else {
+    if (extractorId === 'face-embeddings') await db.run(`DELETE FROM face_embeddings WHERE sha256 = ?`, [row.sha256]);
+    if (extractorId === 'image-exif') await db.run(`UPDATE media_signatures SET extracted_date = NULL, raw_metadata = '{}' WHERE sha256 = ?`, [row.sha256]);
+    if (extractorId === 'vision-classification') await db.run(`UPDATE media_signatures SET ai_category = 'Unsorted', ai_summary = 'No description available.', ai_tags = '[]', llm_error = NULL WHERE sha256 = ?`, [row.sha256]);
+    if (extractorId === 'audio-metadata' || extractorId === 'document-classification') await db.run(`UPDATE media_signatures SET ai_category = 'Unsorted', ai_summary = 'No description available.', ai_tags = '[]', llm_error = NULL, raw_metadata = '{}' WHERE sha256 = ?`, [row.sha256]);
+    await db.run(`DELETE FROM media_extractions WHERE sha256 = ? AND extractor_id = ?`, [row.sha256, extractorId]);
+  }
+
+  const now = new Date().toISOString();
+  for (const extractor of selected) {
+    await db.run(
+      `INSERT INTO media_extractions (sha256, extractor_id, extractor_version, status, result_json, error, applied_at) VALUES (?, ?, ?, 'reset', NULL, NULL, ?)`,
+      [row.sha256, extractor.id, extractor.version, now],
+    );
+  }
 }
 
 function sendJson(res, status, value) {
@@ -689,8 +696,11 @@ const openApiDocument = {
     '/api/scan': {
       post: { summary: 'Trigger a background scan', responses: { 202: { description: 'Scan accepted' } } },
     },
-    '/api/admin/reset-vision': {
-      post: { summary: 'Clear photo/video descriptions and tags', responses: { 200: { description: 'Vision metadata cleared' } } },
+    '/api/media/{id}/reset': {
+      post: { summary: 'Reset one file or one extractor', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }, { name: 'extractor', in: 'query', schema: { type: 'string' } }], responses: { 200: { description: 'Reset applied' }, 409: { description: 'A scan is already running' } } },
+    },
+    '/api/media/{id}/scan': {
+      post: { summary: 'Reset and scan one file', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }, { name: 'extractor', in: 'query', schema: { type: 'string' } }], responses: { 202: { description: 'Single-file scan accepted' }, 409: { description: 'A scan is already running' } } },
     },
   },
 };
@@ -762,15 +772,10 @@ async function run() {
     await startCrawling(SCAN_DIR);
     console.log('🏁 Loop execution completed successfully.');
   } catch (e) {
-    if (e.message !== 'Scan cancelled by maintenance request') scanStatus.lastError = e.message;
+    scanStatus.lastError = e.message;
     console.error(e);
   } finally {
     inProgress = false;
-    if (clearVisionAfterScan) {
-      await resetVisionClassifications();
-      clearVisionAfterScan = false;
-    }
-    cancelRequested = false;
     scanStatus.running = false;
     scanStatus.lastCompletedAt = new Date().toISOString();
   }
@@ -802,6 +807,23 @@ createServer(function (req, res) {
   const mediaContentMatch = /^(?:GET|HEAD) \/api\/media\/(\d+)\/content$/.exec(route);
   if (mediaContentMatch) {
     ready.then(() => serveMediaContent(req, res, mediaContentMatch[1])).catch((error) => sendJson(res, 503, { error: error.message }));
+    return;
+  }
+
+  const mediaActionMatch = /^(POST) \/api\/media\/(\d+)\/(reset|scan)$/.exec(route);
+  if (mediaActionMatch) {
+    ready.then(async () => {
+      if (inProgress) return sendJson(res, 409, { error: 'A scan is already running' });
+      const row = await getMedia(mediaActionMatch[2]);
+      if (!row) return sendJson(res, 404, { error: 'Media not found' });
+      const extractorId = url.searchParams.get('extractor') || null;
+      await resetMedia(row, extractorId);
+      if (mediaActionMatch[3] === 'scan') {
+        await processFile(row.file_path);
+        return sendJson(res, 202, { message: 'Single-file scan completed', statusUrl: '/api/status' });
+      }
+      return sendJson(res, 200, { message: 'File reset queued for the next scan' });
+    }).catch((error) => sendJson(res, 400, { error: error.message }));
     return;
   }
 
@@ -856,17 +878,6 @@ createServer(function (req, res) {
       ready.then(() => run());
       res.writeHead(202, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ message: 'Scanning started', statusUrl: '/api/status' }));
-      break;
-    case 'POST /api/admin/reset-vision':
-      ready.then(async () => {
-        if (inProgress) {
-          cancelRequested = true;
-          clearVisionAfterScan = true;
-          return sendJson(res, 202, { message: 'Vision reset queued until the active scan stops' });
-        }
-        await resetVisionClassifications();
-        return sendJson(res, 200, { message: 'Vision descriptions and tags cleared' });
-      }).catch((error) => sendJson(res, 503, { error: error.message }));
       break;
     default:
       res.end('OK');

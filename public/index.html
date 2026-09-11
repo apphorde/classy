@@ -95,6 +95,7 @@
             </div>
             <aside class="w-full overflow-y-auto border-t border-white/10 p-6 sm:max-w-sm sm:border-l sm:border-t-0 sm:p-8"><div class="flex items-start justify-between gap-4"><div><span class="text-[10px] font-semibold uppercase tracking-[0.25em] text-[#d8ff3e]">{{ selected.type }} / {{ selected.category }}</span><h2 class="mt-3 break-words text-2xl font-medium leading-tight">{{ selected.name }}</h2></div><button on-click="close()" class="grid size-9 shrink-0 place-items-center rounded-full bg-white/10 text-white/60 transition hover:bg-[#d8ff3e] hover:text-[#101214]" aria-label="Close"><svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18"></path></svg></button></div><template if="selected.summary"><p class="mt-6 text-sm leading-6 text-white/55">{{ selected.summary }}</p></template><template if="selected.tags.length"><div class="mt-5 flex flex-wrap gap-2"><template for="tag of selected.tags"><span class="rounded-full bg-[#d8ff3e]/10 px-2.5 py-1 text-[10px] uppercase tracking-widest text-[#d8ff3e]">{{ tag }}</span></template></div></template><template if="selected.llmError"><div class="mt-5 rounded-2xl border border-amber-300/25 bg-amber-300/10 p-4"><p class="text-[10px] font-semibold uppercase tracking-widest text-amber-200">Classification needs review</p><p class="mt-2 break-words text-xs leading-5 text-amber-100/70">{{ selected.llmError }}</p></div></template><div class="mt-8 grid grid-cols-2 gap-3"><div class="rounded-xl bg-white/[0.05] p-3"><p class="text-[10px] uppercase tracking-widest text-white/30">File size</p><p class="mt-1 text-sm">{{ formatBytes(selected.size) }}</p></div><div class="rounded-xl bg-white/[0.05] p-3"><p class="text-[10px] uppercase tracking-widest text-white/30">Captured</p><p class="mt-1 text-sm">{{ formatDate(selected.date) }}</p></div></div><div class="mt-8"><p class="mb-3 text-[10px] uppercase tracking-widest text-white/30">Metadata</p><dl class="space-y-3 text-xs"><template if="selected.metadata.Make || selected.metadata.Model"><div class="flex justify-between gap-4"><dt class="text-white/35">Camera</dt><dd class="text-right">{{ selected.metadata.Make }} {{ selected.metadata.Model }}</dd></div></template><template if="selected.metadata.ImageWidth"><div class="flex justify-between gap-4"><dt class="text-white/35">Dimensions</dt><dd>{{ selected.metadata.ImageWidth }} × {{ selected.metadata.ImageHeight }}</dd></div></template><div class="flex justify-between gap-4"><dt class="text-white/35">Path</dt><dd class="max-w-[12rem] truncate text-right" attr-title="selected.relativePath">{{ selected.relativePath }}</dd></div></dl></div><template if="selected.metadata.GPSLatitude && selected.metadata.GPSLongitude"><div class="mt-8 overflow-hidden rounded-2xl border border-white/10 bg-[#0c0e0f]"><iframe title="Photo location" class="h-44 w-full grayscale-[.35]" attr-src="mapUrl(selected.metadata.GPSLatitude, selected.metadata.GPSLongitude)"></iframe><a target="_blank" rel="noreferrer" attr-href="mapLink(selected.metadata.GPSLatitude, selected.metadata.GPSLongitude)" class="block border-t border-white/10 px-4 py-3 text-xs text-[#d8ff3e]">Open location in OpenStreetMap ↗</a></div></template></aside>
           </section>
+          <button on-click="rescanSelected()" class="absolute bottom-4 left-1/2 z-[60] -translate-x-1/2 rounded-full border border-[#d8ff3e]/30 bg-[#d8ff3e] px-5 py-2.5 text-xs font-bold uppercase tracking-widest text-[#101214] shadow-xl transition hover:bg-white" attr-disabled.bool="rescanState">{{ rescanState || 'Rescan file' }}</button>
         </div></template>
 
         <script setup>
@@ -105,6 +106,7 @@
             const total = ref(0);
             const loading = ref(true);
             const selected = ref(null);
+            const rescanState = ref('');
             const query = ref('');
             const type = ref('all');
             const status = ref(null);
@@ -145,10 +147,17 @@
             function setType(value) { type.value = value; load(); }
             async function open(item) {
               selected.value = item;
+              rescanState.value = '';
               const response = await fetch(`/api/media/${item.id}`);
               if (response.ok) selected.value = await response.json();
             }
             function close() { selected.value = null; }
+            async function rescanSelected() {
+              if (!selected.value) return;
+              rescanState.value = 'Rescanning...';
+              const response = await fetch(`/api/media/${selected.value.id}/scan`, { method: 'POST' });
+              rescanState.value = response.ok ? 'Queued' : 'Retry later';
+            }
             function navigate(delta) {
               if (!items.value.length || !selected.value) return;
               const current = items.value.findIndex((item) => item.id === selected.value.id);
@@ -194,7 +203,7 @@
             });
             onDestroy(() => window.removeEventListener('keydown', handleKeydown));
 
-            return { items, total, loading, selected, type, scanStatusLabel, resultLabel, searchInput, onSearch, setType, refresh, open, close, previous, next, touchStart, touchEnd, faceConfidenceLabel, formatBytes, formatDate, typeGlyph, mapLink, mapUrl };
+            return { items, total, loading, selected, rescanState, type, scanStatusLabel, resultLabel, searchInput, onSearch, setType, refresh, open, close, rescanSelected, previous, next, touchStart, touchEnd, faceConfidenceLabel, formatBytes, formatDate, typeGlyph, mapLink, mapUrl };
           }
         </script>
       </main>
