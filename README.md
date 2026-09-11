@@ -50,6 +50,7 @@ Set these environment variables before starting the indexer:
 | `VISION_MODEL` | No | `qwen2.5-vl:7b` | Model used for photos and video frames |
 | `TEXT_MODEL` | No | `gemma2:27b` | Model used for PDFs and EPUBs |
 | `SCAN_INTERVAL_HOURS` | No | `12` | Hours between background maintenance scans |
+| `FACE_MODEL` | No | `buffalo_l` | InsightFace model pack for local face embeddings |
 | `PORT` | For web process | None | Port used by the health-check server |
 
 The input directory is fixed to `data/` relative to the process working
@@ -165,6 +166,7 @@ Current extractors are:
 - `vision-classification`: image/video category, summary, and descriptive tags
 - `audio-metadata`: ID3 metadata plus conditional genre/style inference
 - `document-classification`: document metadata, summary, and topical tags
+- `face-embeddings`: local InsightFace/ArcFace embeddings for detected faces
 
 Applied results are tracked in `media_extractions` by file SHA-256, extractor
 ID, version, status, result, error, and timestamp. A scan runs only missing or
@@ -173,6 +175,11 @@ outdated extractors; failed extractors remain retryable. Add a new module to
 existing media records.
 
 `GET /api/media/:id` also returns the per-file `extractors` status list.
+Face vectors remain private in `face_embeddings`; the API exposes only face
+boxes, detection scores, and embedding dimensions through
+`GET /api/media/:id/faces`. The InsightFace model is loaded by a persistent
+local worker so it is not initialized once per image. The first face extraction
+downloads the configured InsightFace model pack into the local model cache.
 
 For CI schedulers or backup hooks, call the API after the files are available
 on storage. The deployed service is protected by basic auth, so keep the

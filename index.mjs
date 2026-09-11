@@ -7,6 +7,7 @@ import console from 'console';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { extractors } from './extractors/index.mjs';
+import { extractFaces } from './face-worker.mjs';
 
 // Import your custom remote SQLite module
 let db;
@@ -112,6 +113,18 @@ async function initializeDatabase() {
       error TEXT,
       applied_at TEXT NOT NULL,
       PRIMARY KEY (sha256, extractor_id)
+    )
+  `);
+  await db.run(`
+    CREATE TABLE IF NOT EXISTS face_embeddings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sha256 TEXT NOT NULL,
+      face_index INTEGER NOT NULL,
+      embedding_json TEXT NOT NULL,
+      bbox_json TEXT NOT NULL,
+      detection_score REAL,
+      created_at TEXT NOT NULL,
+      UNIQUE (sha256, face_index)
     )
   `);
   await db.run(`CREATE INDEX IF NOT EXISTS idx_file_locations_sha256 ON file_locations (sha256)`);
@@ -312,6 +325,7 @@ async function processFile(filePath) {
       queryOllama,
       extractVideoFrames,
       runPythonExtractor,
+      extractFaces,
       visionModel: VISION_MODEL,
       textModel: TEXT_MODEL,
     }, sha256);
@@ -347,11 +361,23 @@ async function applyExtractor(extractor, context, sha256) {
   try {
     const result = await extractor.run(context);
     const error = result.fields?.llmError || null;
+    if (!error && result.fields?.faceEmbeddings) await saveFaceEmbeddings(sha256, result.fields.faceEmbeddings);
+    if (result.fields?.faceEmbeddings) delete result.fields.faceEmbeddings;
     await saveExtraction(sha256, extractor, error ? 'error' : 'success', result, error);
     return { fields: result.fields || {}, error };
   } catch (error) {
     await saveExtraction(sha256, extractor, 'error', { fields: {} }, error.message);
     return { fields: {}, error: error.message };
+  }
+}
+
+async function saveFaceEmbeddings(sha256, faces) {
+  await db.run(`DELETE FROM face_embeddings WHERE sha256 = ?`, [sha256]);
+  for (const [faceIndex, face] of faces.entries()) {
+    await db.run(
+      `INSERT INTO face_embeddings (sha256, face_index, embedding_json, bbox_json, detection_score, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+      [sha256, faceIndex, JSON.stringify(face.embedding), JSON.stringify(face.bbox), face.score, new Date().toISOString()],
+    );
   }
 }
 
@@ -543,6 +569,17 @@ async function getExtractorStatus(sha256) {
   }));
 }
 
+async function getFaceSummary(sha256) {
+  const rows = await db.all(`SELECT id, face_index, bbox_json, detection_score FROM face_embeddings WHERE sha256 = ? ORDER BY face_index`, [sha256]);
+  return rows.map((row) => ({
+    id: row.id,
+    index: row.face_index,
+    bbox: parseMetadata(row.bbox_json),
+    detectionScore: row.detection_score,
+    embeddingDimensions: 512,
+  }));
+}
+
 function sendJson(res, status, value) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(value));
@@ -577,6 +614,7 @@ const openApiDocument = {
           tags: { type: 'array', items: { type: 'string' } },
           llmError: { type: ['string', 'null'] },
           extractors: { type: 'array', items: { type: 'object' } },
+          faces: { type: 'array', items: { type: 'object' } },
           metadata: { type: 'object', additionalProperties: true },
           contentUrl: { type: 'string' },
         },
@@ -614,6 +652,9 @@ const openApiDocument = {
         responses: { 200: { description: 'Media bytes' }, 206: { description: 'Partial media bytes' }, 404: { description: 'Media not found' } },
       },
       head: { summary: 'Inspect media headers', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { 200: { description: 'Media headers' } } },
+    },
+    '/api/media/{id}/faces': {
+      get: { summary: 'Get detected face summaries without raw embeddings', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { 200: { description: 'Detected face boxes and embedding dimensions' }, 404: { description: 'Media not found' } } },
     },
     '/api/status': {
       get: { summary: 'Get scan status', responses: { 200: { description: 'Current scan and maintenance counters' } } },
@@ -734,7 +775,17 @@ createServer(function (req, res) {
     ready.then(async () => {
       const row = await getMedia(mediaDetailMatch[1]);
       if (!row) return sendJson(res, 404, { error: 'Media not found' });
-      return sendJson(res, 200, { ...serializeMedia(row), extractors: await getExtractorStatus(row.sha256) });
+      return sendJson(res, 200, { ...serializeMedia(row), extractors: await getExtractorStatus(row.sha256), faces: await getFaceSummary(row.sha256) });
+    }).catch((error) => sendJson(res, 503, { error: error.message }));
+    return;
+  }
+
+  const faceSummaryMatch = /^GET \/api\/media\/(\d+)\/faces$/.exec(route);
+  if (faceSummaryMatch) {
+    ready.then(async () => {
+      const row = await getMedia(faceSummaryMatch[1]);
+      if (!row) return sendJson(res, 404, { error: 'Media not found' });
+      return sendJson(res, 200, { faces: await getFaceSummary(row.sha256) });
     }).catch((error) => sendJson(res, 503, { error: error.message }));
     return;
   }
