@@ -37,6 +37,8 @@ const scanStatus = {
   nextScheduledAt: null,
   lastError: null,
 };
+let cancelRequested = false;
+let clearVisionAfterScan = false;
 
 if (!DB_URL) {
   console.log('Set DATABASE_URL first!');
@@ -296,6 +298,7 @@ async function queryOllama(model, prompt, imagePath = null) {
  * Core processor for single items
  */
 async function processFile(filePath) {
+  if (cancelRequested) throw new Error('Scan cancelled by maintenance request');
   const fileName = path.basename(filePath);
   const stats = fs.statSync(filePath);
   const mimeType = mime.lookup(filePath) || '';
@@ -752,10 +755,15 @@ async function run() {
     await startCrawling(SCAN_DIR);
     console.log('🏁 Loop execution completed successfully.');
   } catch (e) {
-    scanStatus.lastError = e.message;
+    if (e.message !== 'Scan cancelled by maintenance request') scanStatus.lastError = e.message;
     console.error(e);
   } finally {
     inProgress = false;
+    if (clearVisionAfterScan) {
+      await resetVisionClassifications();
+      clearVisionAfterScan = false;
+    }
+    cancelRequested = false;
     scanStatus.running = false;
     scanStatus.lastCompletedAt = new Date().toISOString();
   }
@@ -843,7 +851,15 @@ createServer(function (req, res) {
       res.end(JSON.stringify({ message: 'Scanning started', statusUrl: '/api/status' }));
       break;
     case 'POST /api/admin/reset-vision':
-      ready.then(() => resetVisionClassifications()).then(() => sendJson(res, 200, { message: 'Vision descriptions and tags cleared' })).catch((error) => sendJson(res, 503, { error: error.message }));
+      ready.then(async () => {
+        if (inProgress) {
+          cancelRequested = true;
+          clearVisionAfterScan = true;
+          return sendJson(res, 202, { message: 'Vision reset queued until the active scan stops' });
+        }
+        await resetVisionClassifications();
+        return sendJson(res, 200, { message: 'Vision descriptions and tags cleared' });
+      }).catch((error) => sendJson(res, 503, { error: error.message }));
       break;
     default:
       res.end('OK');
