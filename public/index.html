@@ -82,6 +82,7 @@
         <footer class="flex flex-col gap-3 border-t border-white/10 py-8 text-xs text-white/30 sm:flex-row sm:items-center sm:justify-between"><span>Classy / Personal archive navigator</span><span>Indexed with care</span></footer>
 
         <template if="selected"><div class="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 backdrop-blur-sm sm:items-center sm:p-6" on-click.self="close()" on-touchstart="touchStart($event)" on-touchend="touchEnd($event)">
+          <button on-click="close()" class="absolute right-4 top-4 z-[60] flex items-center gap-2 rounded-full border border-white/15 bg-[#191c1f]/90 px-4 py-2.5 text-xs font-semibold uppercase tracking-widest text-white/75 shadow-xl backdrop-blur transition hover:bg-[#d8ff3e] hover:text-[#101214]" aria-label="Back to archive"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"></path></svg> Back to archive</button>
           <section class="flex h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-[#191c1f] shadow-2xl sm:flex-row sm:rounded-3xl">
             <div class="relative flex h-[42vh] min-h-0 shrink-0 items-center justify-center overflow-hidden bg-[#0c0e0f] sm:h-auto sm:flex-1 sm:shrink">
               <button on-click="previous()" class="absolute left-4 top-1/2 z-10 grid size-10 -translate-y-1/2 place-items-center rounded-full border border-white/10 bg-black/40 text-white/70 backdrop-blur transition hover:bg-[#d8ff3e] hover:text-[#101214]" aria-label="Previous file"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"></path></svg></button>
@@ -90,6 +91,7 @@
               <template if="selected.type === 'audio'"><div class="w-full max-w-md px-8"><div class="mb-8 grid aspect-square place-items-center rounded-3xl bg-gradient-to-br from-[#d8ff3e] to-[#77a100] text-[#101214]"><svg class="size-24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="12" cy="12" r="9"></circle><path d="M9 17V8l7-2v9M9 17a2 2 0 1 0 2 2 2 2 0 0 0-2-2Zm7-2a2 2 0 1 0 2 2 2 2 0 0 0-2-2Z"></path></svg></div><audio controls attr-src="selected.contentUrl" class="w-full"></audio></div></template>
               <template if="selected.type !== 'photo' && selected.type !== 'video' && selected.type !== 'audio'"><div class="text-center text-white/30"><div class="text-7xl font-light text-[#d8ff3e]">{{ typeGlyph(selected.type) }}</div><p class="mt-4 text-sm">Preview unavailable</p></div></template>
               <button on-click="next()" class="absolute right-4 top-1/2 z-10 grid size-10 -translate-y-1/2 place-items-center rounded-full border border-white/10 bg-black/40 text-white/70 backdrop-blur transition hover:bg-[#d8ff3e] hover:text-[#101214]" aria-label="Next file"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"></path></svg></button>
+              <template if="selected.faces && selected.faces.length"><div class="absolute bottom-4 left-4 z-10 rounded-2xl border border-white/10 bg-black/55 px-3 py-2 text-[10px] text-white/75 backdrop-blur"><span class="font-semibold uppercase tracking-widest text-[#d8ff3e]">{{ selected.faces.length }} faces detected</span><span class="ml-2 text-white/45">{{ faceConfidenceLabel(selected.faces) }}</span></div></template>
             </div>
             <aside class="w-full overflow-y-auto border-t border-white/10 p-6 sm:max-w-sm sm:border-l sm:border-t-0 sm:p-8"><div class="flex items-start justify-between gap-4"><div><span class="text-[10px] font-semibold uppercase tracking-[0.25em] text-[#d8ff3e]">{{ selected.type }} / {{ selected.category }}</span><h2 class="mt-3 break-words text-2xl font-medium leading-tight">{{ selected.name }}</h2></div><button on-click="close()" class="grid size-9 shrink-0 place-items-center rounded-full bg-white/10 text-white/60 transition hover:bg-[#d8ff3e] hover:text-[#101214]" aria-label="Close"><svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18"></path></svg></button></div><template if="selected.summary"><p class="mt-6 text-sm leading-6 text-white/55">{{ selected.summary }}</p></template><template if="selected.tags.length"><div class="mt-5 flex flex-wrap gap-2"><template for="tag of selected.tags"><span class="rounded-full bg-[#d8ff3e]/10 px-2.5 py-1 text-[10px] uppercase tracking-widest text-[#d8ff3e]">{{ tag }}</span></template></div></template><template if="selected.llmError"><div class="mt-5 rounded-2xl border border-amber-300/25 bg-amber-300/10 p-4"><p class="text-[10px] font-semibold uppercase tracking-widest text-amber-200">Classification needs review</p><p class="mt-2 break-words text-xs leading-5 text-amber-100/70">{{ selected.llmError }}</p></div></template><div class="mt-8 grid grid-cols-2 gap-3"><div class="rounded-xl bg-white/[0.05] p-3"><p class="text-[10px] uppercase tracking-widest text-white/30">File size</p><p class="mt-1 text-sm">{{ formatBytes(selected.size) }}</p></div><div class="rounded-xl bg-white/[0.05] p-3"><p class="text-[10px] uppercase tracking-widest text-white/30">Captured</p><p class="mt-1 text-sm">{{ formatDate(selected.date) }}</p></div></div><div class="mt-8"><p class="mb-3 text-[10px] uppercase tracking-widest text-white/30">Metadata</p><dl class="space-y-3 text-xs"><template if="selected.metadata.Make || selected.metadata.Model"><div class="flex justify-between gap-4"><dt class="text-white/35">Camera</dt><dd class="text-right">{{ selected.metadata.Make }} {{ selected.metadata.Model }}</dd></div></template><template if="selected.metadata.ImageWidth"><div class="flex justify-between gap-4"><dt class="text-white/35">Dimensions</dt><dd>{{ selected.metadata.ImageWidth }} × {{ selected.metadata.ImageHeight }}</dd></div></template><div class="flex justify-between gap-4"><dt class="text-white/35">Path</dt><dd class="max-w-[12rem] truncate text-right" attr-title="selected.relativePath">{{ selected.relativePath }}</dd></div></dl></div><template if="selected.metadata.GPSLatitude && selected.metadata.GPSLongitude"><div class="mt-8 overflow-hidden rounded-2xl border border-white/10 bg-[#0c0e0f]"><iframe title="Photo location" class="h-44 w-full grayscale-[.35]" attr-src="mapUrl(selected.metadata.GPSLatitude, selected.metadata.GPSLongitude)"></iframe><a target="_blank" rel="noreferrer" attr-href="mapLink(selected.metadata.GPSLatitude, selected.metadata.GPSLongitude)" class="block border-t border-white/10 px-4 py-3 text-xs text-[#d8ff3e]">Open location in OpenStreetMap ↗</a></div></template></aside>
           </section>
@@ -141,7 +143,11 @@
               searchTimer = setTimeout(load, 250);
             }
             function setType(value) { type.value = value; load(); }
-            function open(item) { selected.value = item; }
+            async function open(item) {
+              selected.value = item;
+              const response = await fetch(`/api/media/${item.id}`);
+              if (response.ok) selected.value = await response.json();
+            }
             function close() { selected.value = null; }
             function navigate(delta) {
               if (!items.value.length || !selected.value) return;
@@ -160,6 +166,10 @@
               if (event.key === 'ArrowLeft') previous();
               if (event.key === 'ArrowRight') next();
               if (event.key === 'Escape') close();
+            }
+            function faceConfidenceLabel(faces) {
+              const average = faces.reduce((sum, face) => sum + Number(face.detectionScore || 0), 0) / faces.length;
+              return `${Math.round(average * 100)}% confidence`;
             }
             function formatBytes(value) {
               if (!value) return '0 B';
@@ -184,7 +194,7 @@
             });
             onDestroy(() => window.removeEventListener('keydown', handleKeydown));
 
-            return { items, total, loading, selected, type, scanStatusLabel, resultLabel, searchInput, onSearch, setType, refresh, open, close, previous, next, touchStart, touchEnd, formatBytes, formatDate, typeGlyph, mapLink, mapUrl };
+            return { items, total, loading, selected, type, scanStatusLabel, resultLabel, searchInput, onSearch, setType, refresh, open, close, previous, next, touchStart, touchEnd, faceConfidenceLabel, formatBytes, formatDate, typeGlyph, mapLink, mapUrl };
           }
         </script>
       </main>

@@ -15,5 +15,6 @@ test('authenticated archive UI renders indexed media', async ({ page }) => {
   await page.locator('article').first().click();
   await expect(page.getByRole('button', { name: 'Previous file' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Next file' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Back to archive' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Close' })).toBeVisible();
 });
