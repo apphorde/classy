@@ -254,9 +254,10 @@ function extractVideoFrames(videoPath) {
 async function queryOllama(model, prompt, imagePath = null) {
   const ollamaUrl = new URL(OLLAMA_URL);
   const openAiCompatible = ollamaUrl.pathname.replace(/\/+$/, '').endsWith('/v1');
+  const message = { role: 'user', content: prompt };
   const payload = {
     model: model,
-    messages: [{ role: 'user', content: prompt }],
+    messages: [message],
     stream: false,
     ...(openAiCompatible ? { temperature: 0.2 } : { options: { temperature: 0.2 } }),
     ...(openAiCompatible ? { response_format: { type: 'json_object' } } : { format: 'json' }),
@@ -264,7 +265,14 @@ async function queryOllama(model, prompt, imagePath = null) {
 
   if (imagePath && fs.existsSync(imagePath)) {
     const base64Image = fs.readFileSync(imagePath).toString('base64');
-    payload.messages[0].images = [base64Image];
+    if (openAiCompatible) {
+      message.content = [
+        { type: 'text', text: prompt },
+        { type: 'image_url', image_url: { url: `data:${mime.lookup(imagePath) || 'image/jpeg'};base64,${base64Image}` } },
+      ];
+    } else {
+      message.images = [base64Image];
+    }
   }
 
   try {
