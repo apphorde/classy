@@ -430,6 +430,7 @@ async function startCrawling(dir) {
         }
         else scanStatus.skipped += 1;
       } catch (error) {
+        if (error.message === 'Scan cancelled by maintenance request') throw error;
         scanStatus.failed += 1;
         scanStatus.lastError = `${fullPath}: ${error.message}`;
         console.error(`⚠️ Failed to index ${fullPath}:`, error.message);
