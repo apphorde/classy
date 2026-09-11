@@ -1,17 +1,19 @@
 import json
 import os
 import sys
+from contextlib import redirect_stdout
 
 import cv2
 from insightface.app import FaceAnalysis
 
 
 def main():
-    app = FaceAnalysis(
-        name=os.environ.get("FACE_MODEL", "buffalo_l"),
-        providers=["CPUExecutionProvider"],
-    )
-    app.prepare(ctx_id=-1, det_size=(640, 640))
+    with redirect_stdout(sys.stderr):
+        app = FaceAnalysis(
+            name=os.environ.get("FACE_MODEL", "buffalo_l"),
+            providers=["CPUExecutionProvider"],
+        )
+        app.prepare(ctx_id=-1, det_size=(640, 640))
 
     for line in sys.stdin:
         try:
