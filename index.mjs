@@ -308,7 +308,7 @@ async function processFile(filePath) {
   const existingSignature = await db.get(`SELECT * FROM media_signatures WHERE sha256 = ?`, [sha256]);
   const applicable = extractors.filter((extractor) => extractor.supports({ type, mimeType, filePath }));
   const states = await getExtractionStates(sha256);
-  const complete = applicable.every((extractor) => states.get(extractor.id)?.status === 'success' && states.get(extractor.id).extractor_version === extractor.version);
+  const complete = applicable.every((extractor) => ['success', 'reset'].includes(states.get(extractor.id)?.status) && states.get(extractor.id).extractor_version === extractor.version);
 
   if (existingPath?.sha256 === sha256 && existingSignature && complete) return false;
   console.log(`🔍 Scanning: ${fileName}`);
@@ -324,7 +324,7 @@ async function processFile(filePath) {
 
   for (const extractor of applicable) {
     const state = states.get(extractor.id);
-    if (state?.status === 'success' && state.extractor_version === extractor.version) {
+    if (['success', 'reset'].includes(state?.status) && state.extractor_version === extractor.version) {
       mergeExtractorFields(fields, parseMetadata(state.result_json).fields);
       continue;
     }
@@ -599,6 +599,12 @@ async function resetVisionClassifications() {
     WHERE file_type IN ('photo', 'video')
   `);
   await db.run(`DELETE FROM media_extractions WHERE extractor_id = 'vision-classification'`);
+  await db.run(`
+    INSERT INTO media_extractions (sha256, extractor_id, extractor_version, status, result_json, error, applied_at)
+    SELECT sha256, 'vision-classification', 3, 'reset', NULL, NULL, ?
+    FROM media_signatures
+    WHERE file_type IN ('photo', 'video')
+  `, [new Date().toISOString()]);
 }
 
 function sendJson(res, status, value) {
