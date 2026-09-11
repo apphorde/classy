@@ -9,6 +9,11 @@ test('authenticated archive UI renders indexed media', async ({ page }) => {
   page.on('requestfailed', (request) => console.log(`REQUESTFAILED ${request.url()}: ${request.failure()?.errorText}`));
   await page.addInitScript(() => { window.name = 'debug'; });
   await page.goto(process.env.CLASSY_BASE_URL || 'https://classy.api.apphor.de/', { waitUntil: 'networkidle' });
-  await expect(page.getByText('Every file has a')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Classy home' })).toBeVisible();
   await expect(page.locator('article')).not.toHaveCount(0);
+  await expect(page.locator('lucide-icon')).toHaveCount(5);
+  await page.locator('article').first().click();
+  await expect(page.getByRole('button', { name: 'Previous file' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Next file' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Close' })).toBeVisible();
 });

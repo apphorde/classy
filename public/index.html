@@ -8,6 +8,7 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icon.svg" />
+    <link rel="component" href="https://sodium.static.apphor.de/lucide-icon.html" />
     <title>Classy / Private Archive</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script type="importmap">
@@ -26,23 +27,9 @@
           <div class="flex items-center gap-3 text-xs uppercase tracking-[0.18em] text-white/45">
             <span class="hidden sm:inline">Private archive</span>
             <span class="size-1.5 rounded-full bg-[#d8ff3e]"></span>
-            <span>Live index</span>
+            <span>{{ total }} files</span>
           </div>
         </header>
-
-        <section class="grid gap-8 py-12 lg:grid-cols-[1fr_0.9fr] lg:items-end lg:py-20">
-          <div>
-            <p class="mb-5 text-xs font-semibold uppercase tracking-[0.3em] text-[#d8ff3e]">A considered collection</p>
-            <h1 class="max-w-3xl text-5xl font-semibold leading-[0.95] tracking-[-0.055em] sm:text-7xl lg:text-8xl">Every file has a <span class="text-white/35">place.</span></h1>
-          </div>
-          <div class="max-w-md justify-self-end lg:pb-1">
-            <p class="text-base leading-7 text-white/55">A visual index of the moments, sounds and documents that make up your personal archive.</p>
-            <div class="mt-7 flex items-center gap-8 border-t border-white/10 pt-5 text-sm">
-              <div><strong class="block text-2xl font-medium text-white">{{ total }}</strong><span class="text-xs uppercase tracking-widest text-white/35">Files found</span></div>
-              <div><strong class="block text-2xl font-medium text-white">{{ scanStatusLabel }}</strong><span class="text-xs uppercase tracking-widest text-white/35">Index status</span></div>
-            </div>
-          </div>
-        </section>
 
         <section class="sticky top-0 z-20 -mx-4 border-y border-white/10 bg-[#101214]/95 px-4 py-4 backdrop-blur-xl sm:-mx-8 sm:px-8 lg:-mx-12 lg:px-12">
           <div class="flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -52,11 +39,11 @@
               <input ref="searchInput" on-input="onSearch($event)" type="search" placeholder="Search names, stories, categories..." class="h-12 w-full rounded-full border border-white/10 bg-white/[0.06] pl-11 pr-4 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#d8ff3e]/60 focus:bg-white/[0.09]" />
             </label>
             <div class="flex gap-2 overflow-x-auto pb-1 lg:pb-0">
-              <button on-click="setType('all')" bind-class="{ 'bg-[#d8ff3e]': type === 'all', 'text-[#101214]': type === 'all', 'bg-white/10': type !== 'all', 'text-white/45': type !== 'all' }" class="whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold uppercase tracking-widest transition">All</button>
-              <button on-click="setType('photo')" bind-class="{ 'bg-[#d8ff3e]': type === 'photo', 'text-[#101214]': type === 'photo', 'text-white/45': type !== 'photo' }" class="whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold uppercase tracking-widest transition hover:bg-white/10 hover:text-white">Images</button>
-              <button on-click="setType('video')" bind-class="{ 'bg-[#d8ff3e]': type === 'video', 'text-[#101214]': type === 'video', 'text-white/45': type !== 'video' }" class="whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold uppercase tracking-widest transition hover:bg-white/10 hover:text-white">Video</button>
-              <button on-click="setType('audio')" bind-class="{ 'bg-[#d8ff3e]': type === 'audio', 'text-[#101214]': type === 'audio', 'text-white/45': type !== 'audio' }" class="whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold uppercase tracking-widest transition hover:bg-white/10 hover:text-white">Audio</button>
-              <button on-click="setType('pdf')" bind-class="{ 'bg-[#d8ff3e]': type === 'pdf', 'text-[#101214]': type === 'pdf', 'text-white/45': type !== 'pdf' }" class="whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold uppercase tracking-widest transition hover:bg-white/10 hover:text-white">Docs</button>
+              <button on-click="setType('all')" title="All files" bind-class="{ 'bg-[#d8ff3e]': type === 'all', 'text-[#101214]': type === 'all', 'bg-white/10': type !== 'all', 'text-white/45': type !== 'all' }" class="grid size-10 place-items-center rounded-full transition hover:bg-white/10 hover:text-white"><lucide-icon icon="layout-grid" size="16" icon-classes="size-4"></lucide-icon><span class="sr-only">All files</span></button>
+              <button on-click="setType('photo')" title="Images" bind-class="{ 'bg-[#d8ff3e]': type === 'photo', 'text-[#101214]': type === 'photo', 'text-white/45': type !== 'photo' }" class="grid size-10 place-items-center rounded-full transition hover:bg-white/10 hover:text-white"><lucide-icon icon="image" size="16" icon-classes="size-4"></lucide-icon><span class="sr-only">Images</span></button>
+              <button on-click="setType('video')" title="Video" bind-class="{ 'bg-[#d8ff3e]': type === 'video', 'text-[#101214]': type === 'video', 'text-white/45': type !== 'video' }" class="grid size-10 place-items-center rounded-full transition hover:bg-white/10 hover:text-white"><lucide-icon icon="video" size="16" icon-classes="size-4"></lucide-icon><span class="sr-only">Video</span></button>
+              <button on-click="setType('audio')" title="Audio" bind-class="{ 'bg-[#d8ff3e]': type === 'audio', 'text-[#101214]': type === 'audio', 'text-white/45': type !== 'audio' }" class="grid size-10 place-items-center rounded-full transition hover:bg-white/10 hover:text-white"><lucide-icon icon="music-2" size="16" icon-classes="size-4"></lucide-icon><span class="sr-only">Audio</span></button>
+              <button on-click="setType('pdf')" title="Documents" bind-class="{ 'bg-[#d8ff3e]': type === 'pdf', 'text-[#101214]': type === 'pdf', 'text-white/45': type !== 'pdf' }" class="grid size-10 place-items-center rounded-full transition hover:bg-white/10 hover:text-white"><lucide-icon icon="file-text" size="16" icon-classes="size-4"></lucide-icon><span class="sr-only">Documents</span></button>
             </div>
           </div>
         </section>
@@ -94,20 +81,22 @@
 
         <footer class="flex flex-col gap-3 border-t border-white/10 py-8 text-xs text-white/30 sm:flex-row sm:items-center sm:justify-between"><span>Classy / Personal archive navigator</span><span>Indexed with care</span></footer>
 
-        <template if="selected"><div class="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 backdrop-blur-sm sm:items-center sm:p-6" on-click.self="close()">
-          <section class="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-[#191c1f] shadow-2xl sm:flex-row sm:rounded-3xl">
-            <div class="flex min-h-72 flex-1 items-center justify-center bg-[#0c0e0f] sm:min-h-[600px]">
-              <template if="selected.type === 'photo'"><img attr-src="selected.contentUrl" attr-alt="selected.name" class="max-h-[78vh] max-w-full object-contain" /></template>
-              <template if="selected.type === 'video'"><video controls autoplay attr-src="selected.contentUrl" class="max-h-[78vh] max-w-full"></video></template>
+        <template if="selected"><div class="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 backdrop-blur-sm sm:items-center sm:p-6" on-click.self="close()" on-touchstart="touchStart($event)" on-touchend="touchEnd($event)">
+          <section class="flex h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-[#191c1f] shadow-2xl sm:flex-row sm:rounded-3xl">
+            <div class="relative flex h-[42vh] min-h-0 shrink-0 items-center justify-center overflow-hidden bg-[#0c0e0f] sm:h-auto sm:flex-1 sm:shrink">
+              <button on-click="previous()" class="absolute left-4 top-1/2 z-10 grid size-10 -translate-y-1/2 place-items-center rounded-full border border-white/10 bg-black/40 text-white/70 backdrop-blur transition hover:bg-[#d8ff3e] hover:text-[#101214]" aria-label="Previous file"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"></path></svg></button>
+              <template if="selected.type === 'photo'"><img attr-src="selected.contentUrl" attr-alt="selected.name" class="max-h-full max-w-full object-contain" /></template>
+              <template if="selected.type === 'video'"><video controls autoplay attr-src="selected.contentUrl" class="max-h-full max-w-full"></video></template>
               <template if="selected.type === 'audio'"><div class="w-full max-w-md px-8"><div class="mb-8 grid aspect-square place-items-center rounded-3xl bg-gradient-to-br from-[#d8ff3e] to-[#77a100] text-[#101214]"><svg class="size-24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="12" cy="12" r="9"></circle><path d="M9 17V8l7-2v9M9 17a2 2 0 1 0 2 2 2 2 0 0 0-2-2Zm7-2a2 2 0 1 0 2 2 2 2 0 0 0-2-2Z"></path></svg></div><audio controls attr-src="selected.contentUrl" class="w-full"></audio></div></template>
               <template if="selected.type !== 'photo' && selected.type !== 'video' && selected.type !== 'audio'"><div class="text-center text-white/30"><div class="text-7xl font-light text-[#d8ff3e]">{{ typeGlyph(selected.type) }}</div><p class="mt-4 text-sm">Preview unavailable</p></div></template>
+              <button on-click="next()" class="absolute right-4 top-1/2 z-10 grid size-10 -translate-y-1/2 place-items-center rounded-full border border-white/10 bg-black/40 text-white/70 backdrop-blur transition hover:bg-[#d8ff3e] hover:text-[#101214]" aria-label="Next file"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"></path></svg></button>
             </div>
             <aside class="w-full overflow-y-auto border-t border-white/10 p-6 sm:max-w-sm sm:border-l sm:border-t-0 sm:p-8"><div class="flex items-start justify-between gap-4"><div><span class="text-[10px] font-semibold uppercase tracking-[0.25em] text-[#d8ff3e]">{{ selected.type }} / {{ selected.category }}</span><h2 class="mt-3 break-words text-2xl font-medium leading-tight">{{ selected.name }}</h2></div><button on-click="close()" class="grid size-9 shrink-0 place-items-center rounded-full bg-white/10 text-white/60 transition hover:bg-[#d8ff3e] hover:text-[#101214]" aria-label="Close"><svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18"></path></svg></button></div><template if="selected.summary"><p class="mt-6 text-sm leading-6 text-white/55">{{ selected.summary }}</p></template><template if="selected.tags.length"><div class="mt-5 flex flex-wrap gap-2"><template for="tag of selected.tags"><span class="rounded-full bg-[#d8ff3e]/10 px-2.5 py-1 text-[10px] uppercase tracking-widest text-[#d8ff3e]">{{ tag }}</span></template></div></template><template if="selected.llmError"><div class="mt-5 rounded-2xl border border-amber-300/25 bg-amber-300/10 p-4"><p class="text-[10px] font-semibold uppercase tracking-widest text-amber-200">Classification needs review</p><p class="mt-2 break-words text-xs leading-5 text-amber-100/70">{{ selected.llmError }}</p></div></template><div class="mt-8 grid grid-cols-2 gap-3"><div class="rounded-xl bg-white/[0.05] p-3"><p class="text-[10px] uppercase tracking-widest text-white/30">File size</p><p class="mt-1 text-sm">{{ formatBytes(selected.size) }}</p></div><div class="rounded-xl bg-white/[0.05] p-3"><p class="text-[10px] uppercase tracking-widest text-white/30">Captured</p><p class="mt-1 text-sm">{{ formatDate(selected.date) }}</p></div></div><div class="mt-8"><p class="mb-3 text-[10px] uppercase tracking-widest text-white/30">Metadata</p><dl class="space-y-3 text-xs"><template if="selected.metadata.Make || selected.metadata.Model"><div class="flex justify-between gap-4"><dt class="text-white/35">Camera</dt><dd class="text-right">{{ selected.metadata.Make }} {{ selected.metadata.Model }}</dd></div></template><template if="selected.metadata.ImageWidth"><div class="flex justify-between gap-4"><dt class="text-white/35">Dimensions</dt><dd>{{ selected.metadata.ImageWidth }} × {{ selected.metadata.ImageHeight }}</dd></div></template><div class="flex justify-between gap-4"><dt class="text-white/35">Path</dt><dd class="max-w-[12rem] truncate text-right" attr-title="selected.relativePath">{{ selected.relativePath }}</dd></div></dl></div><template if="selected.metadata.GPSLatitude && selected.metadata.GPSLongitude"><div class="mt-8 overflow-hidden rounded-2xl border border-white/10 bg-[#0c0e0f]"><iframe title="Photo location" class="h-44 w-full grayscale-[.35]" attr-src="mapUrl(selected.metadata.GPSLatitude, selected.metadata.GPSLongitude)"></iframe><a target="_blank" rel="noreferrer" attr-href="mapLink(selected.metadata.GPSLatitude, selected.metadata.GPSLongitude)" class="block border-t border-white/10 px-4 py-3 text-xs text-[#d8ff3e]">Open location in OpenStreetMap ↗</a></div></template></aside>
           </section>
         </div></template>
 
         <script setup>
-          import { ref, computed, templateRef, onInit } from '@li3/web';
+          import { ref, computed, templateRef, onInit, onDestroy } from '@li3/web';
 
           export default function () {
             const items = ref([]);
@@ -119,6 +108,7 @@
             const status = ref(null);
             const searchInput = templateRef('searchInput');
             let searchTimer;
+            let touchStartX = 0;
 
             const scanStatusLabel = computed(() => status.value?.running ? 'Scanning' : status.value?.failed ? 'Review' : 'Ready');
             const resultLabel = computed(() => `${items.value.length} of ${total.value} ${total.value === 1 ? 'file' : 'files'}`);
@@ -153,6 +143,24 @@
             function setType(value) { type.value = value; load(); }
             function open(item) { selected.value = item; }
             function close() { selected.value = null; }
+            function navigate(delta) {
+              if (!items.value.length || !selected.value) return;
+              const current = items.value.findIndex((item) => item.id === selected.value.id);
+              selected.value = items.value[(current + delta + items.value.length) % items.value.length];
+            }
+            function previous() { navigate(-1); }
+            function next() { navigate(1); }
+            function touchStart(event) { touchStartX = event.changedTouches[0].screenX; }
+            function touchEnd(event) {
+              const distance = event.changedTouches[0].screenX - touchStartX;
+              if (Math.abs(distance) >= 45) navigate(distance < 0 ? 1 : -1);
+            }
+            function handleKeydown(event) {
+              if (!selected.value) return;
+              if (event.key === 'ArrowLeft') previous();
+              if (event.key === 'ArrowRight') next();
+              if (event.key === 'Escape') close();
+            }
             function formatBytes(value) {
               if (!value) return '0 B';
               const units = ['B', 'KB', 'MB', 'GB'];
@@ -169,12 +177,14 @@
             function mapUrl(lat, lon) { return `https://www.openstreetmap.org/export/embed.html?bbox=${lon - 0.08},${lat - 0.05},${Number(lon) + 0.08},${Number(lat) + 0.05}&layer=mapnik&marker=${lat},${lon}`; }
 
             onInit(async () => {
+              window.addEventListener('keydown', handleKeydown);
               const response = await fetch('/api/status');
               if (response.ok) status.value = await response.json();
               await load();
             });
+            onDestroy(() => window.removeEventListener('keydown', handleKeydown));
 
-            return { items, total, loading, selected, type, scanStatusLabel, resultLabel, searchInput, onSearch, setType, refresh, open, close, formatBytes, formatDate, typeGlyph, mapLink, mapUrl };
+            return { items, total, loading, selected, type, scanStatusLabel, resultLabel, searchInput, onSearch, setType, refresh, open, close, previous, next, touchStart, touchEnd, formatBytes, formatDate, typeGlyph, mapLink, mapUrl };
           }
         </script>
       </main>
