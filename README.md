@@ -136,6 +136,7 @@ browser.
 - `GET /api/media/:id/content`: stream the original file, including byte ranges for video and audio playback.
 - `GET /api/status`: scan counters and the current index location.
 - `POST /api/scan`: trigger a new scan and return immediately with `202`.
+- `POST /api/admin/reset-vision`: clear photo/video descriptions and tags, leaving them queued for the next scan.
 
 The status response includes `removed`, `lastPrunedAt`, and
 `nextScheduledAt` for maintenance-loop visibility.

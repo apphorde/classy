@@ -588,6 +588,15 @@ async function getFaceSummary(sha256) {
   }));
 }
 
+async function resetVisionClassifications() {
+  await db.run(`
+    UPDATE media_signatures
+    SET ai_category = 'Unsorted', ai_summary = 'No description available.', ai_tags = '[]', llm_error = NULL, enrichment_version = 0
+    WHERE file_type IN ('photo', 'video')
+  `);
+  await db.run(`DELETE FROM media_extractions WHERE extractor_id = 'vision-classification'`);
+}
+
 function sendJson(res, status, value) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(value));
@@ -669,6 +678,9 @@ const openApiDocument = {
     },
     '/api/scan': {
       post: { summary: 'Trigger a background scan', responses: { 202: { description: 'Scan accepted' } } },
+    },
+    '/api/admin/reset-vision': {
+      post: { summary: 'Clear photo/video descriptions and tags', responses: { 200: { description: 'Vision metadata cleared' } } },
     },
   },
 };
@@ -829,6 +841,9 @@ createServer(function (req, res) {
       ready.then(() => run());
       res.writeHead(202, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ message: 'Scanning started', statusUrl: '/api/status' }));
+      break;
+    case 'POST /api/admin/reset-vision':
+      ready.then(() => resetVisionClassifications()).then(() => sendJson(res, 200, { message: 'Vision descriptions and tags cleared' })).catch((error) => sendJson(res, 503, { error: error.message }));
       break;
     default:
       res.end('OK');
