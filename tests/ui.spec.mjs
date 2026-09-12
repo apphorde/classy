@@ -13,9 +13,7 @@ test('authenticated archive UI renders indexed media', async ({ page }) => {
   await expect(page.locator('article')).not.toHaveCount(0);
   await expect(page.locator('lucide-icon')).toHaveCount(5);
   await page.locator('article').first().click();
-  await expect(page.getByRole('button', { name: 'Previous file' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Next file' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Back to archive' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Rescan file' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Close' })).toBeVisible();
+  await expect(page.getByText('Archive preview')).toBeVisible();
+  await expect(page.getByText('Swipe or scroll for next file')).toBeVisible();
 });
