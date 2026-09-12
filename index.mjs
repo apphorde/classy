@@ -709,10 +709,12 @@ async function serveMediaContent(req, res, id) {
   const row = await getMedia(id);
   if (!row) return sendJson(res, 404, { error: 'Media not found' });
 
-  const filePath = path.resolve(row.file_path);
+  let filePath = path.resolve(row.file_path);
   const scanRoot = path.resolve(SCAN_DIR);
   if (filePath !== scanRoot && !filePath.startsWith(`${scanRoot}${path.sep}`)) {
-    return sendJson(res, 403, { error: 'Media path is outside the scan directory' });
+    const currentPath = path.join(scanRoot, path.basename(row.file_path));
+    if (fs.existsSync(currentPath)) filePath = currentPath;
+    else return sendJson(res, 403, { error: 'Media path is outside the scan directory' });
   }
 
   let stats;
