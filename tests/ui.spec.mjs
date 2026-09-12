@@ -15,5 +15,5 @@ test('authenticated archive UI renders indexed media', async ({ page }) => {
   await page.locator('article').first().click();
   await expect(page.getByRole('button', { name: 'Back to archive' })).toBeVisible();
   await expect(page.getByText('Archive preview')).toBeVisible();
-  await expect(page.getByText('Swipe or scroll for next file')).toBeVisible();
+  await expect(page.getByText('Swipe or scroll for next file').first()).toBeVisible();
 });
