@@ -51,10 +51,15 @@ Set these environment variables before starting the indexer:
 | `TEXT_MODEL` | No | `gemma2:27b` | Model used for PDFs and EPUBs |
 | `SCAN_INTERVAL_HOURS` | No | `12` | Hours between background maintenance scans |
 | `FACE_MODEL` | No | `buffalo_l` | InsightFace model pack for local face embeddings |
+| `THUMBNAIL_DIR` | No | `/tmp/classy-thumbnails` | Generated thumbnail storage directory |
 | `PORT` | For web process | None | Port used by the health-check server |
 
 The input directory is fixed to `data/` relative to the process working
 directory. Mount or copy the media library there.
+
+Thumbnails are generated once per file hash for photos, videos, and PDFs. Mount
+`THUMBNAIL_DIR` as a second volume when thumbnail persistence across container
+restarts is desired.
 
 ## Running Locally
 

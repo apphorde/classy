@@ -19,6 +19,7 @@ const VISION_MODEL = process.env.VISION_MODEL || 'qwen2.5-vl:7b';
 const TEXT_MODEL = process.env.TEXT_MODEL || 'gemma2:27b';
 const DB_URL = process.env.DATABASE_URL;
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const THUMBNAIL_DIR = process.env.THUMBNAIL_DIR || '/tmp/classy-thumbnails';
 const SCAN_INTERVAL_HOURS = Math.max(Number(process.env.SCAN_INTERVAL_HOURS) || 12, 1);
 const SCAN_INTERVAL_MS = SCAN_INTERVAL_HOURS * 60 * 60 * 1000;
 
@@ -125,6 +126,15 @@ async function initializeDatabase() {
       detection_score REAL,
       created_at TEXT NOT NULL,
       UNIQUE (sha256, face_index)
+    )
+  `);
+  await db.run(`
+    CREATE TABLE IF NOT EXISTS media_thumbnails (
+      sha256 TEXT PRIMARY KEY,
+      thumbnail_path TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      extractor_version INTEGER NOT NULL,
+      created_at TEXT NOT NULL
     )
   `);
   await db.run(`CREATE INDEX IF NOT EXISTS idx_file_locations_sha256 ON file_locations (sha256)`);
@@ -334,6 +344,8 @@ async function processFile(filePath) {
       extractVideoFrames,
       runPythonExtractor,
       extractFaces,
+      generateThumbnail,
+      sha256,
       visionModel: VISION_MODEL,
       textModel: TEXT_MODEL,
     }, sha256);
@@ -370,7 +382,9 @@ async function applyExtractor(extractor, context, sha256) {
     const result = await extractor.run(context);
     const error = result.fields?.llmError || null;
     if (!error && result.fields?.faceEmbeddings) await saveFaceEmbeddings(sha256, result.fields.faceEmbeddings);
+    if (!error && result.fields?.thumbnailPath) await saveThumbnail(sha256, result.fields.thumbnailPath, extractor.version);
     if (result.fields?.faceEmbeddings) delete result.fields.faceEmbeddings;
+    if (result.fields?.thumbnailPath) delete result.fields.thumbnailPath;
     await saveExtraction(sha256, extractor, error ? 'error' : 'success', result, error);
     return { fields: result.fields || {}, error };
   } catch (error) {
@@ -387,6 +401,11 @@ async function saveFaceEmbeddings(sha256, faces) {
       [sha256, faceIndex, JSON.stringify(face.embedding), JSON.stringify(face.bbox), face.score, new Date().toISOString()],
     );
   }
+}
+
+async function saveThumbnail(sha256, thumbnailPath, version) {
+  await db.run(`DELETE FROM media_thumbnails WHERE sha256 = ?`, [sha256]);
+  await db.run(`INSERT INTO media_thumbnails (sha256, thumbnail_path, mime_type, extractor_version, created_at) VALUES (?, ?, 'image/jpeg', ?, ?)`, [sha256, thumbnailPath, version, new Date().toISOString()]);
 }
 
 async function saveExtraction(sha256, extractor, status, result, error) {
@@ -495,6 +514,7 @@ function serializeMedia(row) {
     llmError: row.llm_error || null,
     metadata,
     contentUrl: `/api/media/${row.id}/content`,
+    thumbnailUrl: ['photo', 'video', 'pdf'].includes(row.file_type) ? `/api/media/${row.id}/thumbnail` : null,
   };
 }
 
@@ -588,6 +608,26 @@ async function getFaceSummary(sha256) {
   }));
 }
 
+async function getThumbnail(sha256) {
+  return db.get(`SELECT thumbnail_path, mime_type FROM media_thumbnails WHERE sha256 = ?`, [sha256]);
+}
+
+function generateThumbnail(filePath, sha256, type) {
+  fs.mkdirSync(THUMBNAIL_DIR, { recursive: true });
+  const outputPath = path.join(THUMBNAIL_DIR, `${sha256}.jpg`);
+  if (fs.existsSync(outputPath)) return outputPath;
+  if (type === 'photo' || type === 'video') {
+    execFileSync('ffmpeg', ['-y', '-i', filePath, '-vf', 'scale=w=640:h=640:force_original_aspect_ratio=decrease', '-frames:v', '1', '-q:v', '5', outputPath], { stdio: 'ignore' });
+    return outputPath;
+  }
+  if (type === 'pdf') {
+    const outputBase = path.join(THUMBNAIL_DIR, sha256);
+    execFileSync('pdftoppm', ['-f', '1', '-singlefile', '-jpeg', '-scale-to', '640', filePath, outputBase], { stdio: 'ignore' });
+    return `${outputBase}.jpg`;
+  }
+  return null;
+}
+
 async function resetMedia(row, extractorId = null) {
   const applicable = extractors.filter((extractor) => extractor.supports({ type: row.file_type, filePath: row.file_path }));
   const selected = extractorId ? applicable.filter((extractor) => extractor.id === extractorId) : applicable;
@@ -595,10 +635,12 @@ async function resetMedia(row, extractorId = null) {
 
   if (!extractorId) {
     await db.run(`DELETE FROM face_embeddings WHERE sha256 = ?`, [row.sha256]);
+    await db.run(`DELETE FROM media_thumbnails WHERE sha256 = ?`, [row.sha256]);
     await db.run(`UPDATE media_signatures SET extracted_date = NULL, ai_category = 'Unsorted', ai_summary = 'No description available.', raw_metadata = '{}', ai_tags = '[]', llm_error = NULL, enrichment_version = 0 WHERE sha256 = ?`, [row.sha256]);
     await db.run(`DELETE FROM media_extractions WHERE sha256 = ?`, [row.sha256]);
   } else {
     if (extractorId === 'face-embeddings') await db.run(`DELETE FROM face_embeddings WHERE sha256 = ?`, [row.sha256]);
+    if (extractorId === 'thumbnail') await db.run(`DELETE FROM media_thumbnails WHERE sha256 = ?`, [row.sha256]);
     if (extractorId === 'image-exif') await db.run(`UPDATE media_signatures SET extracted_date = NULL, raw_metadata = '{}' WHERE sha256 = ?`, [row.sha256]);
     if (extractorId === 'vision-classification') await db.run(`UPDATE media_signatures SET ai_category = 'Unsorted', ai_summary = 'No description available.', ai_tags = '[]', llm_error = NULL WHERE sha256 = ?`, [row.sha256]);
     if (extractorId === 'audio-metadata' || extractorId === 'document-classification') await db.run(`UPDATE media_signatures SET ai_category = 'Unsorted', ai_summary = 'No description available.', ai_tags = '[]', llm_error = NULL, raw_metadata = '{}' WHERE sha256 = ?`, [row.sha256]);
@@ -687,6 +729,9 @@ const openApiDocument = {
       },
       head: { summary: 'Inspect media headers', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { 200: { description: 'Media headers' } } },
     },
+    '/api/media/{id}/thumbnail': {
+      get: { summary: 'Stream generated thumbnail', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { 200: { description: 'JPEG thumbnail' }, 404: { description: 'Thumbnail not available' } } },
+    },
     '/api/media/{id}/faces': {
       get: { summary: 'Get detected face summaries without raw embeddings', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { 200: { description: 'Detected face boxes and embedding dimensions' }, 404: { description: 'Media not found' } } },
     },
@@ -754,6 +799,26 @@ async function serveMediaContent(req, res, id) {
   else res.end();
 }
 
+async function serveThumbnail(res, id) {
+  const row = await getMedia(id);
+  if (!row) return sendJson(res, 404, { error: 'Media not found' });
+  let thumbnail = await getThumbnail(row.sha256);
+  if (!thumbnail || !fs.existsSync(thumbnail.thumbnail_path)) {
+    let sourcePath = path.resolve(row.file_path);
+    if (!fs.existsSync(sourcePath)) sourcePath = path.join(path.resolve(SCAN_DIR), path.basename(row.file_path));
+    if (!fs.existsSync(sourcePath)) return sendJson(res, 404, { error: 'Thumbnail unavailable' });
+    const generatedPath = generateThumbnail(sourcePath, row.sha256, row.file_type);
+    if (!generatedPath) return sendJson(res, 404, { error: 'Thumbnail unavailable' });
+    await saveThumbnail(row.sha256, generatedPath, 1);
+    thumbnail = { thumbnail_path: generatedPath, mime_type: 'image/jpeg' };
+  }
+  const thumbnailPath = path.resolve(thumbnail.thumbnail_path);
+  const thumbnailRoot = path.resolve(THUMBNAIL_DIR);
+  if (thumbnailPath !== thumbnailRoot && !thumbnailPath.startsWith(`${thumbnailRoot}${path.sep}`)) return sendJson(res, 403, { error: 'Thumbnail path is outside the thumbnail directory' });
+  res.writeHead(200, { 'Content-Type': thumbnail.mime_type, 'Cache-Control': 'public, max-age=86400' });
+  fs.createReadStream(thumbnailPath).pipe(res);
+}
+
 let inProgress = false;
 async function run() {
   if (inProgress) return;
@@ -809,6 +874,12 @@ createServer(function (req, res) {
   const mediaContentMatch = /^(?:GET|HEAD) \/api\/media\/(\d+)\/content$/.exec(route);
   if (mediaContentMatch) {
     ready.then(() => serveMediaContent(req, res, mediaContentMatch[1])).catch((error) => sendJson(res, 503, { error: error.message }));
+    return;
+  }
+
+  const thumbnailMatch = /^GET \/api\/media\/(\d+)\/thumbnail$/.exec(route);
+  if (thumbnailMatch) {
+    ready.then(() => serveThumbnail(res, thumbnailMatch[1])).catch((error) => sendJson(res, 503, { error: error.message }));
     return;
   }
 

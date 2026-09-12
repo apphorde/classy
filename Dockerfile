@@ -18,6 +18,7 @@ RUN apt-get update \
     git \
     nano \
     openssh-client \
+    poppler-utils \
     python3 \
     python3-pip \
   && rm -rf /var/lib/apt/lists/*
@@ -41,3 +42,4 @@ USER node
 ENV PATH="$PATH:/home/node/npm/bin:/home/app/node_modules/.bin"
 ENV NODE_OPTIONS="--no-warnings --import file:///home/node/hooks.mjs"
 ENTRYPOINT ["/bin/bash", "/home/node/entrypoint.sh"]
+VOLUME ["/tmp/classy-thumbnails"]
