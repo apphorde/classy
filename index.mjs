@@ -714,10 +714,7 @@ async function serveMediaContent(req, res, id) {
   if (filePath !== scanRoot && !filePath.startsWith(`${scanRoot}${path.sep}`)) {
     const currentPath = path.join(scanRoot, path.basename(row.file_path));
     if (fs.existsSync(currentPath)) filePath = currentPath;
-    else {
-      console.error(`Media path rejected: stored=${row.file_path} resolved=${filePath} scanRoot=${scanRoot}`);
-      return sendJson(res, 403, { error: 'Media path is outside the scan directory' });
-    }
+    else return sendJson(res, 403, { error: 'Media path is outside the scan directory' });
   }
 
   let stats;
