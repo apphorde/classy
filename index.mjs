@@ -513,6 +513,7 @@ function serializeMedia(row) {
     tags: normalizeTags(parseMetadata(row.ai_tags)),
     llmError: row.llm_error || null,
     metadata,
+    faceCount: Number(row.face_count || 0),
     contentUrl: `/api/media/${row.id}/content`,
     thumbnailUrl: ['photo', 'video', 'pdf'].includes(row.file_type) ? `/api/media/${row.id}/thumbnail` : null,
   };
@@ -524,6 +525,7 @@ async function listMedia(url) {
   const search = url.searchParams.get('search')?.trim() || '';
   const type = url.searchParams.get('type')?.trim() || '';
   const category = url.searchParams.get('category')?.trim() || '';
+  const faces = url.searchParams.get('faces') === '1';
   const conditions = [];
   const params = [];
 
@@ -539,12 +541,14 @@ async function listMedia(url) {
     conditions.push('s.ai_category = ?');
     params.push(category);
   }
+  if (faces) conditions.push('EXISTS (SELECT 1 FROM face_embeddings f WHERE f.sha256 = l.sha256)');
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const rows = await db.all(
     `
       SELECT l.id, l.sha256, l.file_path, l.file_size, s.file_type, s.extracted_date,
-             s.ai_category, s.ai_summary, s.raw_metadata, s.ai_tags, s.llm_error
+             s.ai_category, s.ai_summary, s.raw_metadata, s.ai_tags, s.llm_error,
+             (SELECT COUNT(*) FROM face_embeddings f WHERE f.sha256 = l.sha256) AS face_count
       FROM file_locations l
       LEFT JOIN media_signatures s ON s.sha256 = l.sha256
       ${where}
@@ -708,6 +712,7 @@ const openApiDocument = {
           { name: 'search', in: 'query', schema: { type: 'string' } },
           { name: 'type', in: 'query', schema: { type: 'string' } },
           { name: 'category', in: 'query', schema: { type: 'string' } },
+          { name: 'faces', in: 'query', schema: { type: 'string', enum: ['1'] }, description: 'Only files with detected faces' },
           { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 48 } },
           { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0, default: 0 } },
         ],
