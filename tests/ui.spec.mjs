@@ -22,8 +22,13 @@ test('authenticated archive UI renders indexed media', async ({ page }) => {
     const faceRequest = page.waitForRequest(/\/api\/media\/[^/]+\/faces/);
     await faceButton.click();
     await faceRequest;
+    await expect(page.getByText('Detected faces', { exact: true })).toBeVisible();
   }
   const tagButton = page.locator('button').filter({ hasText: /^#/ }).first();
-  if (await tagButton.count()) await tagButton.click();
+  if (await tagButton.count()) {
+    const tagRequest = page.waitForRequest(/\/api\/media\?.*search=/);
+    await tagButton.click();
+    await tagRequest;
+  }
   await page.getByRole('button', { name: 'Grid' }).click();
 });
