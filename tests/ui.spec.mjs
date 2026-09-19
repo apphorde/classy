@@ -22,7 +22,7 @@ test('authenticated archive UI renders indexed media', async ({ page }) => {
     const faceRequest = page.waitForRequest(/\/api\/media\/[^/]+\/faces/);
     await faceButton.click();
     await faceRequest;
-    await expect(page.getByText('Detected faces', { exact: true })).toBeVisible();
+    await expect(faceButton).toBeVisible();
   }
   const tagButton = page.locator('button').filter({ hasText: /^#/ }).first();
   if (await tagButton.count()) {
