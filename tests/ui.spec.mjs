@@ -13,7 +13,7 @@ test('authenticated archive UI renders indexed media', async ({ page }) => {
   await expect(page.locator('article')).not.toHaveCount(0);
   await page.getByTitle('Filters').click();
   await expect(page.getByText('Images')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Faces' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Faces', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Grid' })).toBeVisible();
   await page.getByRole('button', { name: 'Grid' }).click();
   await page.locator('article').first().click();
