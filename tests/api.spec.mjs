@@ -9,6 +9,7 @@ test('archive API exposes OpenAPI, face filtering, and thumbnails', async ({ req
   const spec = await specResponse.json();
   expect(spec.paths['/api/media/{id}/thumbnail']).toBeTruthy();
   expect(spec.paths['/api/media/{id}/faces']).toBeTruthy();
+  expect(spec.paths['/api/face-groups']).toBeTruthy();
 
   const mediaResponse = await request.get(`${baseURL}/api/media?faces=1&limit=1`, { headers: authHeader });
   expect(mediaResponse.ok()).toBeTruthy();
@@ -19,4 +20,8 @@ test('archive API exposes OpenAPI, face filtering, and thumbnails', async ({ req
   const thumbnailResponse = await request.get(`${baseURL}${media.items[0].thumbnailUrl}`, { headers: authHeader });
   expect(thumbnailResponse.ok()).toBeTruthy();
   expect(thumbnailResponse.headers()['content-type']).toContain('image/jpeg');
+
+  const groupsResponse = await request.get(`${baseURL}/api/face-groups`, { headers: authHeader });
+  expect(groupsResponse.ok()).toBeTruthy();
+  expect((await groupsResponse.json()).groups.length).toBeGreaterThan(0);
 });
