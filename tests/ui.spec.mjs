@@ -12,8 +12,8 @@ test('authenticated archive UI renders indexed media', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Classy home' })).toBeVisible();
   await expect(page.locator('article')).not.toHaveCount(0);
   await page.getByTitle('Filters').click();
-  await expect(page.getByTitle('Images')).toBeVisible();
-  await expect(page.getByTitle('Files with detected faces')).toBeVisible();
+  await expect(page.getByText('Images')).toBeVisible();
+  await expect(page.getByText('Faces')).toBeVisible();
   await expect(page.getByText('Archive preview')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Next file' })).toBeVisible();
   await page.getByRole('button', { name: 'Back to archive' }).click();
