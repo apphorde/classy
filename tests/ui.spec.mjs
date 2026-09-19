@@ -15,7 +15,7 @@ test('authenticated archive UI renders indexed media', async ({ page }) => {
   await expect(page.getByText('Images')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Faces', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Grid' })).toBeVisible();
-  const faceButton = page.getByRole('button', { name: /faces$/i }).first();
+  const faceButton = page.getByRole('button', { name: /\d+ faces$/i }).first();
   if (await faceButton.count()) {
     await faceButton.click();
     await expect(page.getByText('Detected faces')).toBeVisible();
