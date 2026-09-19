@@ -125,8 +125,10 @@ The expected response is `OK`.
 Start a scan and inspect its progress with:
 
 ```sh
-curl -X POST https://classy.api.apphor.de/scan
-curl https://classy.api.apphor.de/status
+curl --fail --user "$CLASSY_USER:$CLASSY_PASSWORD" \
+  -X POST https://classy.api.apphor.de/api/scan
+curl --fail --user "$CLASSY_USER:$CLASSY_PASSWORD" \
+  https://classy.api.apphor.de/api/status
 ```
 
 The archive UI is available at the same URL. It is responsive, supports image,
@@ -139,12 +141,15 @@ browser.
 - `GET /api/media`: paginated indexed media. Supports `search`, `type`, `category`, `limit`, and `offset`.
 - `GET /api/media/:id`: full metadata for one indexed file.
 - `GET /api/media/:id/content`: stream the original file, including byte ranges for video and audio playback.
+- `GET /api/media/:id/thumbnail`: stream the generated JPEG thumbnail for photos, videos, and PDFs.
+- `GET /api/media/:id/faces`: detected face boxes and confidence without exposing embeddings.
 - `GET /api/status`: scan counters and the current index location.
 - `POST /api/scan`: trigger a new scan and return immediately with `202`.
 - `POST /api/media/:id/reset`: reset all extractors for one file, or target one with `?extractor=vision-classification`.
 - `POST /api/media/:id/scan`: reset and immediately process one file, optionally targeting one extractor.
 
-The status response includes `removed`, `lastPrunedAt`, and
+The `GET /api/media` endpoint also supports `faces=1` to return only files with
+detected faces. The status response includes `removed`, `lastPrunedAt`, and
 `nextScheduledAt` for maintenance-loop visibility.
 
 ## Extractor Architecture
@@ -174,12 +179,17 @@ Current extractors are:
 - `audio-metadata`: ID3 metadata plus conditional genre/style inference
 - `document-classification`: document metadata, summary, and topical tags
 - `face-embeddings`: local InsightFace/ArcFace embeddings for detected faces
+- `thumbnail`: cached JPEG previews for photos, videos, and PDF documents
 
 Applied results are tracked in `media_extractions` by file SHA-256, extractor
 ID, version, status, result, error, and timestamp. A scan runs only missing or
 outdated extractors; failed extractors remain retryable. Add a new module to
 `extractors/index.mjs` and it will be applied on the next scan without resetting
 existing media records.
+
+Thumbnail files are keyed by SHA-256 in `THUMBNAIL_DIR` and can be mounted as a
+separate Docker volume. They are used by archive cards so opening the vertical
+viewer does not make the grid download full-resolution originals.
 
 `GET /api/media/:id` also returns the per-file `extractors` status list.
 Face vectors remain private in `face_embeddings`; the API exposes only face
