@@ -11,7 +11,8 @@ test('authenticated archive UI renders indexed media', async ({ page }) => {
   await page.goto(process.env.CLASSY_BASE_URL || 'https://classy.api.apphor.de/', { waitUntil: 'networkidle' });
   await expect(page.getByRole('link', { name: 'Classy home' })).toBeVisible();
   await expect(page.locator('article')).not.toHaveCount(0);
-  await expect(page.locator('lucide-icon')).toHaveCount(5);
+  await expect(page.getByTitle('Images')).toBeVisible();
+  await expect(page.getByTitle('Files with detected faces')).toBeVisible();
   await page.locator('article').first().click();
   await expect(page.getByRole('button', { name: 'Back to archive' })).toBeVisible();
   await expect(page.getByText('Archive preview')).toBeVisible();
