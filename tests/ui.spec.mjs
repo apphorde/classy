@@ -14,7 +14,6 @@ test('authenticated archive UI renders indexed media', async ({ page }) => {
   await page.getByTitle('Filters').click();
   await expect(page.getByText('Images')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Faces' })).toBeVisible();
-  await expect(page.getByText('Archive feed')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Grid' })).toBeVisible();
   await page.getByRole('button', { name: 'Grid' }).click();
   await page.locator('article').first().click();

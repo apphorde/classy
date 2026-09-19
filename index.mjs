@@ -552,7 +552,7 @@ async function listMedia(url) {
       FROM file_locations l
       LEFT JOIN media_signatures s ON s.sha256 = l.sha256
       ${where}
-      ORDER BY COALESCE(s.extracted_date, '') DESC, l.id DESC
+      ORDER BY CASE s.file_type WHEN 'photo' THEN 0 WHEN 'video' THEN 1 WHEN 'audio' THEN 2 ELSE 3 END, COALESCE(s.extracted_date, '') DESC, l.id DESC
       LIMIT ? OFFSET ?
     `,
     [...params, limit, offset],
