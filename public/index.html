@@ -18,10 +18,7 @@
     <template app>
       <main class="mx-auto min-h-screen max-w-[1200px] px-0 pb-16 sm:px-5">
         <header class="sticky top-0 z-40 flex h-[60px] items-center justify-between border-b border-[#dbdbdb] bg-white px-4 sm:px-0">
-          <a href="/" aria-label="Classy home" class="flex items-center gap-2.5">
-            <span class="grid size-8 place-items-center rounded-full bg-gradient-to-br from-[#ffdc80] via-[#e1306c] to-[#833ab4] text-sm font-bold text-white">C</span>
-            <span class="font-serif text-[22px] font-semibold tracking-tight">Classy</span>
-          </a>
+          <a href="/" aria-label="Classy home" class="flex items-center gap-2.5"><span class="grid size-8 place-items-center rounded-full bg-gradient-to-br from-[#ffdc80] via-[#e1306c] to-[#833ab4] text-sm font-bold text-white">C</span><span class="font-serif text-[22px] font-semibold tracking-tight">Classy</span></a>
           <label class="relative hidden w-[268px] md:block"><span class="sr-only">Search</span><svg class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#737373]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg><input ref="searchInput" on-input="onSearch($event)" type="search" placeholder="Search" class="h-9 w-full rounded-lg bg-[#efefef] pl-9 pr-3 text-sm outline-none placeholder:text-[#737373] focus:bg-[#e5e5e5]" /></label>
           <div class="flex items-center gap-4 text-[#262626]"><button on-click="refresh()" aria-label="Refresh" class="hidden sm:block"><lucide-icon icon="refresh-cw" size="21" icon-classes="size-5"></lucide-icon></button><span class="text-xs text-[#737373]">{{ total }} files</span><span class="size-2 rounded-full bg-[#22c55e]"></span></div>
         </header>
@@ -29,112 +26,50 @@
         <div class="grid grid-cols-1 gap-8 lg:grid-cols-[220px_minmax(0,630px)_220px] lg:items-start lg:justify-center">
           <aside class="sticky top-[84px] hidden self-start lg:block">
             <nav class="space-y-1 text-sm">
-              <button on-click="close()" class="flex w-full items-center gap-4 rounded-lg px-3 py-3 font-semibold hover:bg-[#efefef]"><svg class="size-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V10Z"></path><path d="M9 21v-6h6v6"></path></svg>Home</button>
-              <button on-click="focusSearch()" class="flex w-full items-center gap-4 rounded-lg px-3 py-3 hover:bg-[#efefef]"><lucide-icon icon="search" size="22" icon-classes="size-[22px]"></lucide-icon>Search</button>
-              <button on-click="toggleFilters()" class="flex w-full items-center gap-4 rounded-lg px-3 py-3 hover:bg-[#efefef]"><lucide-icon icon="sliders-horizontal" size="22" icon-classes="size-[22px]"></lucide-icon>Filters</button>
-              <button on-click="setFaces(!facesOnly)" class="flex w-full items-center gap-4 rounded-lg px-3 py-3 hover:bg-[#efefef]" class-text-blue="facesOnly"><lucide-icon icon="scan-face" size="22" icon-classes="size-[22px]"></lucide-icon>People</button>
+              <button on-click="close" class="flex w-full items-center gap-4 rounded-lg px-3 py-3 font-semibold hover:bg-[#efefef]"><svg class="size-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V10Z"></path><path d="M9 21v-6h6v6"></path></svg>Home</button>
+              <button on-click="focusSearch" class="flex w-full items-center gap-4 rounded-lg px-3 py-3 hover:bg-[#efefef]"><lucide-icon icon="search" size="22" icon-classes="size-[22px]"></lucide-icon>Search</button>
+              <button on-click="toggleFilters" class="flex w-full items-center gap-4 rounded-lg px-3 py-3 hover:bg-[#efefef]"><lucide-icon icon="sliders-horizontal" size="22" icon-classes="size-[22px]"></lucide-icon>Filters</button>
+              <button on-click="toggleFaces" class="flex w-full items-center gap-4 rounded-lg px-3 py-3 hover:bg-[#efefef]"><lucide-icon icon="scan-face" size="22" icon-classes="size-[22px]"></lucide-icon>People</button>
             </nav>
-            <div class="mt-10 border-t border-[#dbdbdb] px-3 pt-5"><p class="text-xs font-semibold text-[#737373]">Your archive</p><p class="mt-2 text-xs leading-5 text-[#737373]">{{ total }} indexed files<br />{{ scanStatusLabel }} index</p></div>
+            <div class="mt-10 border-t border-[#dbdbdb] px-3 pt-5"><p class="text-xs font-semibold text-[#737373]">Private archive</p><p class="mt-2 text-xs leading-5 text-[#737373]">{{ total }} indexed files<br />{{ scanStatusLabel }} index</p></div>
           </aside>
 
           <section class="min-w-0">
             <div class="border-b border-[#dbdbdb] bg-white px-4 py-3 sm:mt-5 sm:rounded-lg sm:border">
-              <div class="flex items-center gap-2"><label class="relative min-w-0 flex-1 md:hidden"><span class="sr-only">Search</span><svg class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#737373]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg><input ref="mobileSearchInput" on-input="onSearch($event)" type="search" placeholder="Search" class="h-9 w-full rounded-lg bg-[#efefef] pl-9 pr-3 text-sm outline-none placeholder:text-[#737373]" /></label><button on-click="toggleFilters()" title="Filters" class="grid size-9 shrink-0 place-items-center rounded-full text-[#737373] hover:bg-[#efefef]"><lucide-icon icon="sliders-horizontal" size="18" icon-classes="size-4"></lucide-icon><span class="sr-only">Filters</span></button></div>
-              <template if="filtersOpen"><div class="mt-3 flex gap-2 overflow-x-auto border-t border-[#efefef] pt-3"><button on-click="setType('all')" class="rounded-full px-3 py-1.5 text-xs font-semibold" class-text-blue="type === 'all'">All</button><button on-click="setType('photo')" class="rounded-full px-3 py-1.5 text-xs font-semibold" class-text-blue="type === 'photo'">Images</button><button on-click="setType('video')" class="rounded-full px-3 py-1.5 text-xs font-semibold" class-text-blue="type === 'video'">Video</button><button on-click="setType('audio')" class="rounded-full px-3 py-1.5 text-xs font-semibold" class-text-blue="type === 'audio'">Audio</button><button on-click="setFaces(!facesOnly)" class="rounded-full px-3 py-1.5 text-xs font-semibold" class-text-blue="facesOnly">Faces</button></div></template>
+              <div class="flex items-center gap-2"><label class="relative min-w-0 flex-1 md:hidden"><span class="sr-only">Search</span><svg class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#737373]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg><input ref="mobileSearchInput" on-input="onSearch($event)" type="search" placeholder="Search" class="h-9 w-full rounded-lg bg-[#efefef] pl-9 pr-3 text-sm outline-none placeholder:text-[#737373]" /></label><button on-click="toggleFilters" title="Filters" class="grid size-9 shrink-0 place-items-center rounded-full text-[#737373] hover:bg-[#efefef]"><lucide-icon icon="sliders-horizontal" size="18" icon-classes="size-4"></lucide-icon><span class="sr-only">Filters</span></button></div>
+              <template if="filtersOpen"><div class="mt-3 flex gap-2 overflow-x-auto border-t border-[#efefef] pt-3"><button on-click="setType('all')" class="rounded-full px-3 py-1.5 text-xs font-semibold">All</button><button on-click="setType('photo')" class="rounded-full px-3 py-1.5 text-xs font-semibold">Images</button><button on-click="setType('video')" class="rounded-full px-3 py-1.5 text-xs font-semibold">Video</button><button on-click="setType('audio')" class="rounded-full px-3 py-1.5 text-xs font-semibold">Audio</button><button on-click="toggleFaces" class="rounded-full px-3 py-1.5 text-xs font-semibold">Faces</button></div></template>
             </div>
 
-            <template if="!previewMode"><div class="grid grid-cols-3 gap-1 py-5 sm:gap-3"><template for="item of items"><article on-click="open(item)" class="group relative aspect-square cursor-pointer overflow-hidden bg-[#efefef]"><template if="item.type === 'photo' || item.type === 'video'"><img loading="lazy" attr-src="item.thumbnailUrl || item.contentUrl" attr-alt="item.name" class="size-full object-cover transition duration-300 group-hover:scale-105" /></template><template if="item.type !== 'photo' && item.type !== 'video'"><div class="grid size-full place-items-center text-[#737373]"><span class="text-4xl">{{ typeGlyph(item.type) }}</span></div></template><div class="absolute inset-0 hidden items-center justify-center bg-black/35 text-white group-hover:flex"><span class="text-xs font-semibold">{{ item.category }}</span></div><span if="item.faceCount" class="absolute right-2 top-2 grid size-6 place-items-center rounded-full bg-white/90"><lucide-icon icon="scan-face" size="13" icon-classes="size-3"></lucide-icon></span></article></template></div></template>
+            <template if="!previewMode"><div class="grid grid-cols-3 gap-1 py-5 sm:gap-3"><template for="item of items"><article on-click="open(item)" class="group relative aspect-square cursor-pointer overflow-hidden bg-[#efefef]"><template if="item.type === 'photo' || item.type === 'video'"><img loading="lazy" attr-src="item.thumbnailUrl || item.contentUrl" attr-alt="item.name" class="size-full object-cover transition duration-300 group-hover:scale-105" /></template><template if="item.type !== 'photo' && item.type !== 'video'"><div class="grid size-full place-items-center text-[#737373]"><span class="text-4xl">{{ typeGlyph(item.type) }}</span></div></template><div class="absolute inset-0 hidden items-center justify-center bg-black/35 text-white group-hover:flex"><span class="text-xs font-semibold">{{ item.category }}</span></div><template if="item.faceCount"><span class="absolute right-2 top-2 grid size-6 place-items-center rounded-full bg-white/90"><lucide-icon icon="scan-face" size="13" icon-classes="size-3"></lucide-icon></span></template></article></template></div></template>
             <template if="loading"><div class="grid grid-cols-3 gap-1 py-5 sm:gap-3"><div class="aspect-square animate-pulse bg-[#efefef]"></div><div class="aspect-square animate-pulse bg-[#efefef]"></div><div class="aspect-square animate-pulse bg-[#efefef]"></div></div></template>
             <template if="!loading && !items.length"><div class="my-8 rounded-lg border border-[#dbdbdb] bg-white px-6 py-20 text-center text-sm text-[#737373]">No files found.</div></template>
           </section>
 
-          <aside class="sticky top-[84px] hidden self-start lg:block"><div class="flex items-center gap-3 px-2"><span class="grid size-11 place-items-center rounded-full bg-gradient-to-br from-[#ffdc80] via-[#e1306c] to-[#833ab4] text-sm font-bold text-white">C</span><div><p class="text-sm font-semibold">classy_archive</p><p class="text-xs text-[#737373]">Private archive</p></div></div><div class="mt-7 px-2 text-xs text-[#737373]"><p class="font-semibold text-[#262626]">Suggested filters</p><p class="mt-3 leading-5">Search any tag, category, filename, or description. Use Faces to find files with detected people.</p></div></aside>
+          <aside class="sticky top-[84px] hidden self-start lg:block"><div class="px-2"><p class="text-sm font-semibold">Private archive</p><p class="mt-1 text-xs text-[#737373]">Your personal collection</p></div><div class="mt-7 px-2 text-xs text-[#737373]"><p class="font-semibold text-[#262626]">Suggested filters</p><p class="mt-3 leading-5">Search any tag, category, filename, or description. Use Faces to find files with detected people.</p></div></aside>
         </div>
 
         <template if="!previewMode"><footer class="border-t border-[#dbdbdb] py-8 text-xs text-[#737373]">Classy / Personal archive navigator</footer></template>
 
-        <template if="previewMode"><section ref="previewScroller" on-scroll="onPreviewScroll($event)" class="relative z-10 min-h-screen snap-y snap-mandatory overflow-y-auto bg-[#101214] scroll-smooth">
-          <div class="sticky top-0 z-20 flex items-center justify-between border-b border-white/10 bg-[#101214]/85 px-4 py-4 backdrop-blur-xl sm:px-8"><span class="text-xs font-semibold uppercase tracking-[0.25em] text-[#d8ff3e]">Archive feed</span><button on-click="close()" class="rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white/70">Grid</button></div>
-          <template for="[item, index] of items"><article attr-data-preview-index="index" class="grid min-h-[calc(100vh-65px)] snap-start place-items-center px-4 py-10 sm:px-10"><div class="w-full max-w-[600px] overflow-hidden rounded-lg bg-white text-[#262626] shadow-xl"><div class="flex items-center gap-3 border-b border-[#efefef] px-4 py-3"><span class="grid size-8 place-items-center rounded-full bg-gradient-to-br from-[#ffdc80] via-[#e1306c] to-[#833ab4] text-xs font-bold text-white">C</span><div class="min-w-0"><p class="truncate text-sm font-semibold">classy_archive</p><p class="truncate text-xs text-[#737373]">{{ item.name }}</p></div><span class="ml-auto text-xs text-[#737373]">{{ index + 1 }} / {{ items.length }}</span></div><div class="relative flex aspect-square items-center justify-center bg-black"><template if="item.type === 'photo'"><img loading="lazy" attr-src="item.contentUrl" attr-alt="item.name" class="max-h-full max-w-full object-contain" /></template><template if="item.type === 'video'"><video controls preload="metadata" attr-src="item.contentUrl" class="max-h-full max-w-full"></video></template><template if="item.type !== 'photo' && item.type !== 'video'"><span class="text-6xl text-white/60">{{ typeGlyph(item.type) }}</span></template><span if="item.faceCount" class="absolute right-3 top-3 rounded-full bg-white/90 px-2 py-1 text-xs font-semibold text-[#262626]">{{ item.faceCount }} faces</span></div><div class="p-4"><div class="flex items-center gap-4"><lucide-icon icon="heart" size="22" icon-classes="size-[22px]"></lucide-icon><lucide-icon icon="message-circle" size="22" icon-classes="size-[22px]"></lucide-icon><lucide-icon icon="send" size="22" icon-classes="size-[22px]"></lucide-icon><span class="ml-auto"><lucide-icon icon="bookmark" size="22" icon-classes="size-[22px]"></lucide-icon></span></div><p class="mt-3 text-sm leading-5"><strong>classy_archive</strong> {{ item.summary }}</p><div class="mt-2 flex flex-wrap gap-x-2 text-sm text-[#00376b]"><template for="tag of item.tags"><span>#{{ tag }}</span></template></div><button on-click="rescanSelected()" class="mt-4 text-xs font-semibold text-[#0095f6]">Rescan file</button></div></div></article></template>
+        <template if="previewMode"><section ref="previewScroller" on-scroll="onPreviewScroll($event)" class="relative z-10 min-h-screen snap-y snap-mandatory overflow-y-auto bg-white scroll-smooth">
+          <div class="sticky top-0 z-20 flex items-center justify-end border-b border-[#dbdbdb] bg-white/90 px-4 py-3 backdrop-blur-xl sm:px-8"><button on-click="close" class="rounded-full border border-[#dbdbdb] bg-white px-4 py-2 text-xs font-semibold text-[#262626]">Grid</button></div>
+          <template for="[item, index] of items"><article attr-data-preview-index="index" class="grid min-h-[calc(100vh-53px)] snap-start place-items-center bg-white px-4 py-10 sm:px-10"><div class="w-full max-w-[600px] overflow-hidden rounded-lg border border-[#dbdbdb] bg-white text-[#262626] shadow-sm"><div class="flex items-center gap-3 border-b border-[#efefef] px-4 py-3"><div class="min-w-0"><p class="truncate text-sm font-semibold">{{ item.name }}</p><p class="truncate text-xs text-[#737373]">{{ item.type }} · {{ item.category }}</p></div><span class="ml-auto text-xs text-[#737373]">{{ index + 1 }} / {{ items.length }}</span></div><div class="relative flex aspect-square items-center justify-center bg-black"><template if="item.type === 'photo'"><img loading="lazy" attr-src="item.contentUrl" attr-alt="item.name" class="max-h-full max-w-full object-contain" /></template><template if="item.type === 'video'"><video controls preload="metadata" attr-src="item.contentUrl" class="max-h-full max-w-full"></video></template><template if="item.type !== 'photo' && item.type !== 'video'"><span class="text-6xl text-white/60">{{ typeGlyph(item.type) }}</span></template><template if="item.faceCount"><span class="absolute right-3 top-3 rounded-full bg-white/90 px-2 py-1 text-xs font-semibold text-[#262626]">{{ item.faceCount }} faces</span></template></div><div class="p-4"><div class="flex items-center gap-4"><lucide-icon icon="heart" size="22" icon-classes="size-[22px]"></lucide-icon><lucide-icon icon="message-circle" size="22" icon-classes="size-[22px]"></lucide-icon><lucide-icon icon="send" size="22" icon-classes="size-[22px]"></lucide-icon><span class="ml-auto"><lucide-icon icon="bookmark" size="22" icon-classes="size-[22px]"></lucide-icon></span></div><p class="mt-3 text-sm leading-5">{{ item.summary }}</p><div class="mt-2 flex flex-wrap gap-x-2 text-sm text-[#00376b]"><template for="tag of item.tags"><span>#{{ tag }}</span></template></div><button on-click="rescanSelected" class="mt-4 text-xs font-semibold text-[#0095f6]">Rescan file</button></div></div></article></template>
         </section></template>
 
         <script setup>
           import { ref, computed, templateRef, onInit, onDestroy } from '@li3/web';
-
           export default function () {
-            const items = ref([]);
-            const total = ref(0);
-            const loading = ref(true);
-            const selected = ref(null);
-            const previewMode = ref(true);
-            const query = ref('');
-            const type = ref('all');
-            const facesOnly = ref(false);
-            const filtersOpen = ref(false);
-            const status = ref(null);
-            const searchInput = templateRef('searchInput');
-            const mobileSearchInput = templateRef('mobileSearchInput');
-            const previewScroller = templateRef('previewScroller');
-            let searchTimer;
-
+            const items = ref([]); const total = ref(0); const loading = ref(true); const selected = ref(null); const previewMode = ref(true); const query = ref(''); const type = ref('all'); const facesOnly = ref(false); const filtersOpen = ref(false); const status = ref(null); const searchInput = templateRef('searchInput'); const mobileSearchInput = templateRef('mobileSearchInput'); const previewScroller = templateRef('previewScroller'); let searchTimer;
             const scanStatusLabel = computed(() => status.value?.running ? 'Scanning' : status.value?.failed ? 'Review' : 'Ready');
-            const resultLabel = computed(() => `${items.value.length} of ${total.value} files`);
-
-            async function load() {
-              loading.value = true;
-              const params = new URLSearchParams({ limit: '60' });
-              if (query.value) params.set('search', query.value);
-              if (type.value !== 'all') params.set('type', type.value);
-              if (facesOnly.value) params.set('faces', '1');
-              try {
-                const response = await fetch(`/api/media?${params}`);
-                if (!response.ok) throw new Error('Could not load archive');
-                const data = await response.json();
-                items.value = data.items;
-                total.value = data.total;
-              } finally {
-                loading.value = false;
-              }
-            }
-
-            async function refresh() {
-              const response = await fetch('/api/status');
-              if (response.ok) status.value = await response.json();
-              await load();
-            }
+            async function load() { loading.value = true; const params = new URLSearchParams({ limit: '60' }); if (query.value) params.set('search', query.value); if (type.value !== 'all') params.set('type', type.value); if (facesOnly.value) params.set('faces', '1'); try { const response = await fetch(`/api/media?${params}`); const data = await response.json(); items.value = data.items; total.value = data.total; } finally { loading.value = false; } }
+            async function refresh() { const response = await fetch('/api/status'); if (response.ok) status.value = await response.json(); await load(); }
             function onSearch(event) { query.value = event.target.value; clearTimeout(searchTimer); searchTimer = setTimeout(load, 250); }
-            function setType(value) { type.value = value; load(); }
-            function setFaces(value) { facesOnly.value = value; load(); }
-            function toggleFilters() { filtersOpen.value = !filtersOpen.value; }
-            function focusSearch() { (searchInput.value || mobileSearchInput.value)?.focus(); }
-            function close() { selected.value = null; previewMode.value = false; }
-            function open(item) {
-              selected.value = item;
-              previewMode.value = true;
-              const index = items.value.findIndex((entry) => entry.id === item.id);
-              const scroll = (attempt = 0) => {
-                const page = previewScroller.value?.querySelector(`[data-preview-index="${index}"]`);
-                if (page) page.scrollIntoView({ block: 'start' });
-                else if (attempt < 10) setTimeout(() => scroll(attempt + 1), 25);
-              };
-              setTimeout(() => scroll(), 25);
-            }
-            function onPreviewScroll(event) {
-              const pages = [...event.target.querySelectorAll('[data-preview-index]')];
-              const current = pages.find((page) => page.getBoundingClientRect().top >= 0 && page.getBoundingClientRect().top < window.innerHeight / 2);
-              if (current) selected.value = items.value[Number(current.dataset.previewIndex)];
-            }
-            async function rescanSelected() {
-              if (!selected.value) return;
-              await fetch(`/api/media/${selected.value.id}/scan`, { method: 'POST' });
-            }
-            function typeGlyph(value) { return { audio: '♪', pdf: '▤', ebook: '▥', unknown: '•' }[value] || '•'; }
-            function formatBytes(value) { if (!value) return '0 B'; const units = ['B', 'KB', 'MB', 'GB']; const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1); return `${(value / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`; }
-            function nextPreviewPage() { const page = previewScroller.value?.querySelector('[data-preview-index="1"]'); page?.scrollIntoView({ behavior: 'smooth' }); }
-
-            onInit(async () => { window.addEventListener('keydown', (event) => event.key === 'Escape' && close()); await refresh(); });
-            onDestroy(() => {});
-            return { items, total, loading, selected, previewMode, type, facesOnly, filtersOpen, scanStatusLabel, resultLabel, searchInput, mobileSearchInput, previewScroller, onSearch, onPreviewScroll, nextPreviewPage, setType, setFaces, toggleFilters, focusSearch, refresh, open, close, rescanSelected, typeGlyph, formatBytes };
+            function setType(value) { type.value = value; load(); } function toggleFaces() { facesOnly.value = !facesOnly.value; load(); } function toggleFilters() { filtersOpen.value = !filtersOpen.value; } function focusSearch() { (searchInput.value || mobileSearchInput.value)?.focus(); } function close() { selected.value = null; previewMode.value = false; }
+            function open(item) { selected.value = item; previewMode.value = true; const index = items.value.findIndex((entry) => entry.id === item.id); setTimeout(() => previewScroller.value?.querySelector(`[data-preview-index="${index}"]`)?.scrollIntoView({ block: 'start' }), 50); }
+            function onPreviewScroll(event) { const page = [...event.target.querySelectorAll('[data-preview-index]')].find((entry) => entry.getBoundingClientRect().top >= 0 && entry.getBoundingClientRect().top < window.innerHeight / 2); if (page) selected.value = items.value[Number(page.dataset.previewIndex)]; }
+            async function rescanSelected() { if (selected.value) await fetch(`/api/media/${selected.value.id}/scan`, { method: 'POST' }); }
+            function typeGlyph(value) { return { audio: '♪', pdf: '▤', ebook: '▥', unknown: '•' }[value] || '•'; } function formatBytes(value) { if (!value) return '0 B'; const units = ['B', 'KB', 'MB', 'GB']; const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1); return `${(value / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`; }
+            onInit(refresh); onDestroy(() => {});
+            return { items, total, loading, selected, previewMode, type, facesOnly, filtersOpen, scanStatusLabel, searchInput, mobileSearchInput, previewScroller, onSearch, setType, toggleFaces, toggleFilters, focusSearch, refresh, open, close, rescanSelected, onPreviewScroll, typeGlyph, formatBytes };
           }
         </script>
       </main>
