@@ -37,14 +37,15 @@
               <svg class="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-white/35" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
               <input ref="searchInput" on-input="onSearch($event)" type="search" placeholder="Search" class="h-10 w-full rounded-lg bg-[#efefef] pl-10 pr-4 text-sm text-[#262626] outline-none transition placeholder:text-[#737373] focus:bg-[#e5e5e5]" />
             </label>
-            <div class="flex gap-2 overflow-x-auto pb-1 lg:pb-0">
+            <button on-click="toggleFilters()" title="Filters" bind-class="{ 'text-[#0095f6]': filtersOpen, 'text-[#737373]': !filtersOpen }" class="grid size-9 shrink-0 place-items-center self-end rounded-full transition hover:text-[#262626] lg:self-auto"><lucide-icon icon="sliders-horizontal" size="18" icon-classes="size-4"></lucide-icon><span class="sr-only">Filters</span></button>
+            <template if="filtersOpen"><div class="flex gap-2 overflow-x-auto pb-1 lg:pb-0">
               <button on-click="setType('all')" title="All files" bind-class="{ 'text-[#0095f6]': type === 'all', 'text-[#737373]': type !== 'all' }" class="grid size-9 place-items-center rounded-full transition hover:text-[#262626]"><lucide-icon icon="layout-grid" size="16" icon-classes="size-4"></lucide-icon><span class="sr-only">All files</span></button>
               <button on-click="setType('photo')" title="Images" bind-class="{ 'text-[#0095f6]': type === 'photo', 'text-[#737373]': type !== 'photo' }" class="grid size-9 place-items-center rounded-full transition hover:text-[#262626]"><lucide-icon icon="image" size="16" icon-classes="size-4"></lucide-icon><span class="sr-only">Images</span></button>
               <button on-click="setType('video')" title="Video" bind-class="{ 'text-[#0095f6]': type === 'video', 'text-[#737373]': type !== 'video' }" class="grid size-9 place-items-center rounded-full transition hover:text-[#262626]"><lucide-icon icon="video" size="16" icon-classes="size-4"></lucide-icon><span class="sr-only">Video</span></button>
               <button on-click="setType('audio')" title="Audio" bind-class="{ 'text-[#0095f6]': type === 'audio', 'text-[#737373]': type !== 'audio' }" class="grid size-9 place-items-center rounded-full transition hover:text-[#262626]"><lucide-icon icon="music-2" size="16" icon-classes="size-4"></lucide-icon><span class="sr-only">Audio</span></button>
               <button on-click="setType('pdf')" title="Documents" bind-class="{ 'text-[#0095f6]': type === 'pdf', 'text-[#737373]': type !== 'pdf' }" class="grid size-9 place-items-center rounded-full transition hover:text-[#262626]"><lucide-icon icon="file-text" size="16" icon-classes="size-4"></lucide-icon><span class="sr-only">Documents</span></button>
               <button on-click="setFaces(!facesOnly)" title="Files with detected faces" bind-class="{ 'text-[#0095f6]': facesOnly, 'text-[#737373]': !facesOnly }" class="grid size-9 place-items-center rounded-full transition hover:text-[#262626]"><lucide-icon icon="scan-face" size="16" icon-classes="size-4"></lucide-icon><span class="sr-only">Files with detected faces</span></button>
-            </div>
+            </div></template>
           </div>
         </section>
 
@@ -114,11 +115,12 @@
             const total = ref(0);
             const loading = ref(true);
             const selected = ref(null);
-            const previewMode = ref(false);
+            const previewMode = ref(true);
             const rescanState = ref('');
             const query = ref('');
             const type = ref('all');
             const facesOnly = ref(false);
+            const filtersOpen = ref(false);
             const status = ref(null);
             const searchInput = templateRef('searchInput');
             const previewScroller = templateRef('previewScroller');
@@ -158,6 +160,7 @@
             }
             function setType(value) { type.value = value; load(); }
             function setFaces(value) { facesOnly.value = value; load(); }
+            function toggleFilters() { filtersOpen.value = !filtersOpen.value; }
             function focusSearch() { searchInput.value?.focus(); }
             async function open(item) {
               selected.value = item;
@@ -232,7 +235,7 @@
             });
             onDestroy(() => window.removeEventListener('keydown', handleKeydown));
 
-            return { items, total, loading, selected, previewMode, rescanState, type, facesOnly, scanStatusLabel, resultLabel, searchInput, previewScroller, onSearch, onPreviewScroll, nextPreviewPage, setType, setFaces, focusSearch, refresh, open, close, rescanSelected, previous, next, touchStart, touchEnd, faceConfidenceLabel, formatBytes, formatDate, typeGlyph, mapLink, mapUrl };
+            return { items, total, loading, selected, previewMode, rescanState, type, facesOnly, filtersOpen, scanStatusLabel, resultLabel, searchInput, previewScroller, onSearch, onPreviewScroll, nextPreviewPage, setType, setFaces, toggleFilters, focusSearch, refresh, open, close, rescanSelected, previous, next, touchStart, touchEnd, faceConfidenceLabel, formatBytes, formatDate, typeGlyph, mapLink, mapUrl };
           }
         </script>
       </main>

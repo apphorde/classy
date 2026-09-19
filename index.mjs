@@ -530,8 +530,8 @@ async function listMedia(url) {
   const params = [];
 
   if (search) {
-    conditions.push('(l.file_path LIKE ? OR s.ai_summary LIKE ? OR s.ai_category LIKE ?)');
-    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    conditions.push('(l.file_path LIKE ? OR s.ai_summary LIKE ? OR s.ai_category LIKE ? OR s.ai_tags LIKE ?)');
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
   }
   if (type) {
     conditions.push('s.file_type = ?');
