@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" class="bg-[#101214]">
+<html lang="en" class="bg-[#fafafa]">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -16,43 +16,42 @@
     </script>
     <script type="module">import '@li3/web';</script>
   </head>
-  <body class="min-h-screen overflow-x-hidden bg-[#101214] text-[#f4f0e7] antialiased selection:bg-[#d8ff3e] selection:text-[#101214]">
+  <body class="min-h-screen overflow-x-hidden bg-[#fafafa] text-[#262626] antialiased selection:bg-[#cce8ff] selection:text-[#262626]">
     <template app>
-      <main class="mx-auto min-h-screen max-w-[1600px] px-4 py-5 sm:px-8 lg:px-12">
-        <header class="flex items-center justify-between border-b border-white/10 pb-5">
+      <main class="mx-auto min-h-screen max-w-[975px] px-0 pb-20 sm:px-5">
+        <header class="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-[#dbdbdb] bg-white px-4 sm:px-0">
           <a href="/" class="flex items-center gap-3" aria-label="Classy home">
-            <span class="grid size-9 place-items-center rounded-full bg-[#d8ff3e] text-sm font-black text-[#101214]">C</span>
-            <span class="text-sm font-bold uppercase tracking-[0.28em]">Classy</span>
+            <span class="grid size-8 place-items-center rounded-full bg-gradient-to-br from-[#ffdc80] via-[#e1306c] to-[#833ab4] text-sm font-black text-white">C</span>
+            <span class="font-serif text-xl font-semibold tracking-tight text-[#262626]">Classy</span>
           </a>
-          <div class="flex items-center gap-3 text-xs uppercase tracking-[0.18em] text-white/45">
+          <div class="flex items-center gap-4 text-xs text-[#737373]">
             <span class="hidden sm:inline">Private archive</span>
-            <span class="size-1.5 rounded-full bg-[#d8ff3e]"></span>
             <span>{{ total }} files</span>
           </div>
         </header>
 
-        <section class="sticky top-0 z-20 -mx-4 border-y border-white/10 bg-[#101214]/95 px-4 py-4 backdrop-blur-xl sm:-mx-8 sm:px-8 lg:-mx-12 lg:px-12">
+        <section class="sticky top-16 z-20 border-b border-[#dbdbdb] bg-white px-4 py-3 sm:px-0">
           <div class="flex flex-col gap-3 lg:flex-row lg:items-center">
             <label class="relative min-w-0 flex-1">
               <span class="sr-only">Search the archive</span>
               <svg class="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-white/35" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
-              <input ref="searchInput" on-input="onSearch($event)" type="search" placeholder="Search names, stories, categories..." class="h-12 w-full rounded-full border border-white/10 bg-white/[0.06] pl-11 pr-4 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#d8ff3e]/60 focus:bg-white/[0.09]" />
+              <input ref="searchInput" on-input="onSearch($event)" type="search" placeholder="Search" class="h-10 w-full rounded-lg bg-[#efefef] pl-10 pr-4 text-sm text-[#262626] outline-none transition placeholder:text-[#737373] focus:bg-[#e5e5e5]" />
             </label>
             <div class="flex gap-2 overflow-x-auto pb-1 lg:pb-0">
-              <button on-click="setType('all')" title="All files" bind-class="{ 'bg-[#d8ff3e]': type === 'all', 'text-[#101214]': type === 'all', 'bg-white/10': type !== 'all', 'text-white/45': type !== 'all' }" class="grid size-10 place-items-center rounded-full transition hover:bg-white/10 hover:text-white"><lucide-icon icon="layout-grid" size="16" icon-classes="size-4"></lucide-icon><span class="sr-only">All files</span></button>
-              <button on-click="setType('photo')" title="Images" bind-class="{ 'bg-[#d8ff3e]': type === 'photo', 'text-[#101214]': type === 'photo', 'text-white/45': type !== 'photo' }" class="grid size-10 place-items-center rounded-full transition hover:bg-white/10 hover:text-white"><lucide-icon icon="image" size="16" icon-classes="size-4"></lucide-icon><span class="sr-only">Images</span></button>
-              <button on-click="setType('video')" title="Video" bind-class="{ 'bg-[#d8ff3e]': type === 'video', 'text-[#101214]': type === 'video', 'text-white/45': type !== 'video' }" class="grid size-10 place-items-center rounded-full transition hover:bg-white/10 hover:text-white"><lucide-icon icon="video" size="16" icon-classes="size-4"></lucide-icon><span class="sr-only">Video</span></button>
-              <button on-click="setType('audio')" title="Audio" bind-class="{ 'bg-[#d8ff3e]': type === 'audio', 'text-[#101214]': type === 'audio', 'text-white/45': type !== 'audio' }" class="grid size-10 place-items-center rounded-full transition hover:bg-white/10 hover:text-white"><lucide-icon icon="music-2" size="16" icon-classes="size-4"></lucide-icon><span class="sr-only">Audio</span></button>
-              <button on-click="setType('pdf')" title="Documents" bind-class="{ 'bg-[#d8ff3e]': type === 'pdf', 'text-[#101214]': type === 'pdf', 'text-white/45': type !== 'pdf' }" class="grid size-10 place-items-center rounded-full transition hover:bg-white/10 hover:text-white"><lucide-icon icon="file-text" size="16" icon-classes="size-4"></lucide-icon><span class="sr-only">Documents</span></button>
-              <button on-click="setFaces(!facesOnly)" title="Files with detected faces" bind-class="{ 'bg-[#d8ff3e]': facesOnly, 'text-[#101214]': facesOnly, 'text-white/45': !facesOnly }" class="grid size-10 place-items-center rounded-full transition hover:bg-white/10 hover:text-white"><lucide-icon icon="scan-face" size="16" icon-classes="size-4"></lucide-icon><span class="sr-only">Files with detected faces</span></button>
+              <button on-click="setType('all')" title="All files" bind-class="{ 'text-[#0095f6]': type === 'all', 'text-[#737373]': type !== 'all' }" class="grid size-9 place-items-center rounded-full transition hover:text-[#262626]"><lucide-icon icon="layout-grid" size="16" icon-classes="size-4"></lucide-icon><span class="sr-only">All files</span></button>
+              <button on-click="setType('photo')" title="Images" bind-class="{ 'text-[#0095f6]': type === 'photo', 'text-[#737373]': type !== 'photo' }" class="grid size-9 place-items-center rounded-full transition hover:text-[#262626]"><lucide-icon icon="image" size="16" icon-classes="size-4"></lucide-icon><span class="sr-only">Images</span></button>
+              <button on-click="setType('video')" title="Video" bind-class="{ 'text-[#0095f6]': type === 'video', 'text-[#737373]': type !== 'video' }" class="grid size-9 place-items-center rounded-full transition hover:text-[#262626]"><lucide-icon icon="video" size="16" icon-classes="size-4"></lucide-icon><span class="sr-only">Video</span></button>
+              <button on-click="setType('audio')" title="Audio" bind-class="{ 'text-[#0095f6]': type === 'audio', 'text-[#737373]': type !== 'audio' }" class="grid size-9 place-items-center rounded-full transition hover:text-[#262626]"><lucide-icon icon="music-2" size="16" icon-classes="size-4"></lucide-icon><span class="sr-only">Audio</span></button>
+              <button on-click="setType('pdf')" title="Documents" bind-class="{ 'text-[#0095f6]': type === 'pdf', 'text-[#737373]': type !== 'pdf' }" class="grid size-9 place-items-center rounded-full transition hover:text-[#262626]"><lucide-icon icon="file-text" size="16" icon-classes="size-4"></lucide-icon><span class="sr-only">Documents</span></button>
+              <button on-click="setFaces(!facesOnly)" title="Files with detected faces" bind-class="{ 'text-[#0095f6]': facesOnly, 'text-[#737373]': !facesOnly }" class="grid size-9 place-items-center rounded-full transition hover:text-[#262626]"><lucide-icon icon="scan-face" size="16" icon-classes="size-4"></lucide-icon><span class="sr-only">Files with detected faces</span></button>
             </div>
           </div>
         </section>
 
         <section class="py-8">
-          <div class="mb-6 flex items-center justify-between">
-            <p class="text-xs uppercase tracking-[0.24em] text-white/35">{{ resultLabel }}</p>
-            <button on-click="refresh()" class="flex items-center gap-2 text-xs uppercase tracking-widest text-white/40 transition hover:text-[#d8ff3e]"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8.1 8.1 0 0 0-14.8-4L3 10m0-5v5h5M4 13a8.1 8.1 0 0 0 14.8 4L21 14m0 5v-5h-5"></path></svg> Refresh</button>
+          <div class="mb-4 flex items-center justify-between">
+            <p class="text-xs font-semibold text-[#737373]">{{ resultLabel }}</p>
+            <button on-click="refresh()" class="flex items-center gap-2 text-xs font-semibold text-[#737373] transition hover:text-[#262626]"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8.1 8.1 0 0 0-14.8-4L3 10m0-5v5h5M4 13a8.1 8.1 0 0 0 14.8 4L21 14m0 5v-5h-5"></path></svg> Refresh</button>
           </div>
 
           <template if="loading"><div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -61,27 +60,29 @@
 
           <template if="!loading && !items.length"><div class="rounded-3xl border border-dashed border-white/15 px-6 py-24 text-center"><p class="text-2xl font-medium">Nothing here yet.</p><p class="mt-2 text-sm text-white/40">Try a different search or run a new scan.</p></div></template>
 
-          <template if="!loading && items.length"><div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <template if="!loading && items.length"><div class="grid grid-cols-2 gap-1 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4">
             <template for="item of items">
-              <article on-click="open(item)" class="group relative cursor-pointer overflow-hidden rounded-2xl border border-white/10 bg-[#191c1f] transition duration-300 hover:-translate-y-1 hover:border-[#d8ff3e]/40 hover:shadow-[0_18px_50px_rgba(0,0,0,.3)]">
-                <div class="relative flex aspect-[0.82] items-center justify-center overflow-hidden bg-[#24282b]">
+              <article on-click="open(item)" class="group relative cursor-pointer overflow-hidden border border-[#dbdbdb] bg-white transition duration-200 hover:shadow-[0_4px_16px_rgba(0,0,0,.12)]">
+                <div class="relative flex aspect-square items-center justify-center overflow-hidden bg-[#efefef]">
                   <template if="item.type === 'photo'"><img loading="lazy" attr-src="item.thumbnailUrl || item.contentUrl" attr-alt="item.name" class="size-full object-cover transition duration-700 group-hover:scale-105" /></template>
                   <template if="item.type === 'video'"><img loading="lazy" attr-src="item.thumbnailUrl || item.contentUrl" attr-alt="item.name" class="size-full object-cover opacity-75" /><span class="absolute grid size-11 place-items-center rounded-full bg-[#d8ff3e] text-[#101214] shadow-xl"><svg class="ml-0.5 size-4" viewBox="0 0 24 24" fill="currentColor"><path d="m8 5 11 7-11 7V5Z"></path></svg></span></template>
                   <template if="item.type !== 'photo' && item.type !== 'video'"><div class="grid size-16 place-items-center rounded-full border border-white/10 bg-white/[0.04] text-[#d8ff3e]"><span class="text-2xl font-light">{{ typeGlyph(item.type) }}</span></div></template>
                   <div class="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/75 to-transparent"></div>
-                  <span class="absolute left-3 top-3 rounded-full bg-black/40 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-white/75 backdrop-blur">{{ item.type }}</span>
-                  <template if="item.llmError"><span class="absolute bottom-3 left-3 rounded-full bg-amber-300 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-[#101214]">Review</span></template>
+                  <span class="absolute left-3 top-3 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-white backdrop-blur">{{ item.type }}</span>
+                  <template if="item.llmError"><span class="absolute bottom-3 left-3 rounded-full bg-[#ffcc80] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-[#262626]">Review</span></template>
                   <template if="item.metadata.GPSLatitude"><span class="absolute right-3 top-3 grid size-7 place-items-center rounded-full bg-black/40 text-[#d8ff3e] backdrop-blur" title="Has geolocation"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s7-6.1 7-12a7 7 0 1 0-14 0c0 5.9 7 12 7 12Z"></path><circle cx="12" cy="9" r="2.2"></circle></svg></span></template>
-                  <template if="item.faceCount"><span class="absolute right-3 bottom-3 grid size-7 place-items-center rounded-full bg-[#d8ff3e] text-[#101214]" title="Faces detected"><lucide-icon icon="scan-face" size="14" icon-classes="size-3.5"></lucide-icon></span></template>
+                  <template if="item.faceCount"><span class="absolute bottom-3 right-3 grid size-7 place-items-center rounded-full bg-white text-[#262626]" title="Faces detected"><lucide-icon icon="scan-face" size="14" icon-classes="size-3.5"></lucide-icon></span></template>
                 </div>
-                <div class="p-4"><h2 class="truncate text-sm font-medium text-white">{{ item.name }}</h2><div class="mt-2 flex items-center justify-between gap-2 text-[11px] text-white/35"><span class="truncate">{{ item.category }}</span><span>{{ formatBytes(item.size) }}</span></div><template if="item.tags.length"><div class="mt-3 flex gap-1 overflow-hidden"><template for="tag of item.tags.slice(0, 3)"><span class="whitespace-nowrap rounded-full bg-white/[0.06] px-2 py-1 text-[9px] text-white/40">#{{ tag }}</span></template></div></template></div>
+                <div class="p-3"><h2 class="truncate text-sm font-semibold text-[#262626]">{{ item.name }}</h2><div class="mt-1 flex items-center justify-between gap-2 text-[11px] text-[#737373]"><span class="truncate">{{ item.category }}</span><span>{{ formatBytes(item.size) }}</span></div><template if="item.tags.length"><div class="mt-2 flex gap-1 overflow-hidden"><template for="tag of item.tags.slice(0, 3)"><span class="whitespace-nowrap text-[10px] text-[#737373]">#{{ tag }}</span></template></div></template></div>
               </article>
             </template>
           </div></template>
 
         </section>
 
-        <footer class="flex flex-col gap-3 border-t border-white/10 py-8 text-xs text-white/30 sm:flex-row sm:items-center sm:justify-between"><span>Classy / Personal archive navigator</span><span>Indexed with care</span></footer>
+        <footer class="flex flex-col gap-3 border-t border-[#dbdbdb] py-8 text-xs text-[#737373] sm:flex-row sm:items-center sm:justify-between"><span>Classy / Personal archive navigator</span><span>Indexed with care</span></footer>
+
+        <template if="!previewMode"><nav class="fixed inset-x-0 bottom-0 z-40 flex h-14 items-center justify-around border-t border-[#dbdbdb] bg-white px-8 text-[#737373] sm:hidden"><button on-click="close()" aria-label="Home" class="grid size-10 place-items-center hover:text-[#262626]"><lucide-icon icon="home" size="20" icon-classes="size-5"></lucide-icon><span class="sr-only">Home</span></button><button on-click="focusSearch()" aria-label="Search" class="grid size-10 place-items-center hover:text-[#262626]"><lucide-icon icon="search" size="20" icon-classes="size-5"></lucide-icon><span class="sr-only">Search</span></button><button on-click="setFaces(!facesOnly)" aria-label="Faces" bind-class="{ 'text-[#0095f6]': facesOnly }" class="grid size-10 place-items-center hover:text-[#262626]"><lucide-icon icon="scan-face" size="20" icon-classes="size-5"></lucide-icon><span class="sr-only">Faces</span></button><button on-click="refresh()" aria-label="Refresh" class="grid size-10 place-items-center hover:text-[#262626]"><lucide-icon icon="refresh-cw" size="20" icon-classes="size-5"></lucide-icon><span class="sr-only">Refresh</span></button></nav></template>
 
         <template if="previewMode"><section ref="previewScroller" on-scroll="onPreviewScroll($event)" class="fixed inset-0 z-50 snap-y snap-mandatory overflow-y-auto bg-[#101214] scroll-smooth">
           <div class="sticky top-0 z-20 flex items-center justify-between border-b border-white/10 bg-[#101214]/85 px-4 py-4 backdrop-blur-xl sm:px-8"><span class="text-xs font-semibold uppercase tracking-[0.25em] text-[#d8ff3e]">Archive preview</span><button on-click="close()" class="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white/70 transition hover:bg-[#d8ff3e] hover:text-[#101214]" aria-label="Back to archive"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"></path></svg> Back to archive</button></div>
@@ -157,6 +158,7 @@
             }
             function setType(value) { type.value = value; load(); }
             function setFaces(value) { facesOnly.value = value; load(); }
+            function focusSearch() { searchInput.value?.focus(); }
             async function open(item) {
               selected.value = item;
               rescanState.value = '';
@@ -230,7 +232,7 @@
             });
             onDestroy(() => window.removeEventListener('keydown', handleKeydown));
 
-            return { items, total, loading, selected, previewMode, rescanState, type, facesOnly, scanStatusLabel, resultLabel, searchInput, previewScroller, onSearch, onPreviewScroll, nextPreviewPage, setType, setFaces, refresh, open, close, rescanSelected, previous, next, touchStart, touchEnd, faceConfidenceLabel, formatBytes, formatDate, typeGlyph, mapLink, mapUrl };
+            return { items, total, loading, selected, previewMode, rescanState, type, facesOnly, scanStatusLabel, resultLabel, searchInput, previewScroller, onSearch, onPreviewScroll, nextPreviewPage, setType, setFaces, focusSearch, refresh, open, close, rescanSelected, previous, next, touchStart, touchEnd, faceConfidenceLabel, formatBytes, formatDate, typeGlyph, mapLink, mapUrl };
           }
         </script>
       </main>
