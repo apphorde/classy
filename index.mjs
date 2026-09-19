@@ -137,6 +137,20 @@ async function initializeDatabase() {
       created_at TEXT NOT NULL
     )
   `);
+  await db.run(`
+    CREATE TABLE IF NOT EXISTS face_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      label TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
+  await db.run(`
+    CREATE TABLE IF NOT EXISTS face_group_members (
+      face_id INTEGER PRIMARY KEY,
+      group_id INTEGER NOT NULL
+    )
+  `);
   await db.run(`CREATE INDEX IF NOT EXISTS idx_file_locations_sha256 ON file_locations (sha256)`);
   try {
     await db.run(`ALTER TABLE media_signatures ADD COLUMN llm_error TEXT`);
@@ -526,6 +540,7 @@ async function listMedia(url) {
   const type = url.searchParams.get('type')?.trim() || '';
   const category = url.searchParams.get('category')?.trim() || '';
   const faces = url.searchParams.get('faces') === '1';
+  const faceGroup = url.searchParams.get('face_group')?.trim() || '';
   const conditions = [];
   const params = [];
 
@@ -542,6 +557,8 @@ async function listMedia(url) {
     params.push(category);
   }
   if (faces) conditions.push('EXISTS (SELECT 1 FROM face_embeddings f WHERE f.sha256 = l.sha256)');
+  if (faceGroup) conditions.push('EXISTS (SELECT 1 FROM face_embeddings f JOIN face_group_members gm ON gm.face_id = f.id WHERE f.sha256 = l.sha256 AND gm.group_id = ?)');
+  if (faceGroup) params.push(faceGroup);
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const rows = await db.all(
@@ -602,14 +619,90 @@ async function getExtractorStatus(sha256) {
 }
 
 async function getFaceSummary(sha256) {
-  const rows = await db.all(`SELECT id, face_index, bbox_json, detection_score FROM face_embeddings WHERE sha256 = ? ORDER BY face_index`, [sha256]);
+  const rows = await db.all(`SELECT f.id, f.face_index, f.bbox_json, f.detection_score, m.group_id, g.label FROM face_embeddings f LEFT JOIN face_group_members m ON m.face_id = f.id LEFT JOIN face_groups g ON g.id = m.group_id WHERE f.sha256 = ? ORDER BY f.face_index`, [sha256]);
   return rows.map((row) => ({
     id: row.id,
     index: row.face_index,
     bbox: parseMetadata(row.bbox_json),
     detectionScore: row.detection_score,
     embeddingDimensions: 512,
+    groupId: row.group_id || null,
+    groupLabel: row.label || null,
   }));
+}
+
+function cosineSimilarity(left, right) {
+  let dot = 0;
+  let leftNorm = 0;
+  let rightNorm = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    dot += left[index] * right[index];
+    leftNorm += left[index] ** 2;
+    rightNorm += right[index] ** 2;
+  }
+  return dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
+}
+
+async function rebuildFaceGroups() {
+  const faces = await db.all(`SELECT id, embedding_json FROM face_embeddings ORDER BY id`);
+  if (!faces.length) return;
+  const oldGroups = await db.all(`SELECT id, label FROM face_groups`);
+  const oldMembers = await db.all(`SELECT face_id, group_id FROM face_group_members`);
+  const oldByGroup = new Map();
+  for (const member of oldMembers) {
+    if (!oldByGroup.has(member.group_id)) oldByGroup.set(member.group_id, new Set());
+    oldByGroup.get(member.group_id).add(member.face_id);
+  }
+
+  const parent = new Map(faces.map((face) => [face.id, face.id]));
+  const find = (id) => {
+    let root = id;
+    while (parent.get(root) !== root) root = parent.get(root);
+    while (parent.get(id) !== id) {
+      const next = parent.get(id);
+      parent.set(id, root);
+      id = next;
+    }
+    return root;
+  };
+  const union = (left, right) => {
+    const leftRoot = find(left);
+    const rightRoot = find(right);
+    if (leftRoot !== rightRoot) parent.set(rightRoot, leftRoot);
+  };
+  const embeddings = faces.map((face) => ({ id: face.id, vector: JSON.parse(face.embedding_json) }));
+  const threshold = Number(process.env.FACE_SIMILARITY_THRESHOLD) || 0.48;
+  for (let left = 0; left < embeddings.length; left += 1) {
+    for (let right = left + 1; right < embeddings.length; right += 1) {
+      if (cosineSimilarity(embeddings[left].vector, embeddings[right].vector) >= threshold) union(embeddings[left].id, embeddings[right].id);
+    }
+  }
+
+  const clusters = new Map();
+  for (const face of faces) {
+    const root = find(face.id);
+    if (!clusters.has(root)) clusters.set(root, []);
+    clusters.get(root).push(face.id);
+  }
+
+  await db.run(`DELETE FROM face_group_members`);
+  for (const memberIds of clusters.values()) {
+    const memberSet = new Set(memberIds);
+    const match = oldGroups
+      .map((group) => ({ group, overlap: [...(oldByGroup.get(group.id) || [])].filter((id) => memberSet.has(id)).length }))
+      .sort((left, right) => right.overlap - left.overlap)[0];
+    let groupId = match?.overlap ? match.group.id : null;
+    if (!groupId) {
+      await db.run(`INSERT INTO face_groups (label, created_at, updated_at) VALUES (NULL, ?, ?)`, [new Date().toISOString(), new Date().toISOString()]);
+      const created = await db.get(`SELECT id FROM face_groups ORDER BY id DESC LIMIT 1`);
+      groupId = created.id;
+    }
+    for (const faceId of memberIds) await db.run(`INSERT INTO face_group_members (face_id, group_id) VALUES (?, ?)`, [faceId, groupId]);
+  }
+}
+
+async function getFaceGroups() {
+  return db.all(`SELECT g.id, g.label, COUNT(m.face_id) AS face_count FROM face_groups g LEFT JOIN face_group_members m ON m.group_id = g.id GROUP BY g.id ORDER BY COALESCE(g.label, ''), g.id`);
 }
 
 async function getThumbnail(sha256) {
@@ -665,6 +758,17 @@ function sendJson(res, status, value) {
   res.end(JSON.stringify(value));
 }
 
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      try { resolve(body ? JSON.parse(body) : {}); } catch (error) { reject(error); }
+    });
+    req.on('error', reject);
+  });
+}
+
 const openApiDocument = {
   openapi: '3.1.0',
   info: {
@@ -713,6 +817,7 @@ const openApiDocument = {
           { name: 'type', in: 'query', schema: { type: 'string' } },
           { name: 'category', in: 'query', schema: { type: 'string' } },
           { name: 'faces', in: 'query', schema: { type: 'string', enum: ['1'] }, description: 'Only files with detected faces' },
+          { name: 'face_group', in: 'query', schema: { type: 'integer' }, description: 'Only files containing a member of this face group' },
           { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 48 } },
           { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0, default: 0 } },
         ],
@@ -739,6 +844,12 @@ const openApiDocument = {
     },
     '/api/media/{id}/faces': {
       get: { summary: 'Get detected face summaries without raw embeddings', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], responses: { 200: { description: 'Detected face boxes and embedding dimensions' }, 404: { description: 'Media not found' } } },
+    },
+    '/api/face-groups': {
+      get: { summary: 'List face similarity groups', responses: { 200: { description: 'Face groups and member counts' } } },
+    },
+    '/api/face-groups/{id}': {
+      patch: { summary: 'Name a face group', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { label: { type: 'string' } } } } } }, responses: { 200: { description: 'Updated face group' } } },
     },
     '/api/status': {
       get: { summary: 'Get scan status', responses: { 200: { description: 'Current scan and maintenance counters' } } },
@@ -842,6 +953,7 @@ async function run() {
     console.log(`🚀 Starting processing engine on target: ${SCAN_DIR}`);
     await pruneMissingLocations();
     await startCrawling(SCAN_DIR);
+    await rebuildFaceGroups();
     console.log('🏁 Loop execution completed successfully.');
   } catch (e) {
     scanStatus.lastError = e.message;
@@ -885,6 +997,22 @@ createServer(function (req, res) {
   const thumbnailMatch = /^GET \/api\/media\/(\d+)\/thumbnail$/.exec(route);
   if (thumbnailMatch) {
     ready.then(() => serveThumbnail(res, thumbnailMatch[1])).catch((error) => sendJson(res, 503, { error: error.message }));
+    return;
+  }
+
+  if (route === 'GET /api/face-groups') {
+    ready.then(() => getFaceGroups()).then((groups) => sendJson(res, 200, { groups })).catch((error) => sendJson(res, 503, { error: error.message }));
+    return;
+  }
+
+  const faceGroupMatch = /^PATCH \/api\/face-groups\/(\d+)$/.exec(route);
+  if (faceGroupMatch) {
+    ready.then(async () => {
+      const body = await readJsonBody(req);
+      const label = typeof body.label === 'string' ? body.label.trim().slice(0, 80) : '';
+      await db.run(`UPDATE face_groups SET label = ?, updated_at = ? WHERE id = ?`, [label || null, new Date().toISOString(), faceGroupMatch[1]]);
+      return sendJson(res, 200, { id: Number(faceGroupMatch[1]), label: label || null });
+    }).catch((error) => sendJson(res, 400, { error: error.message }));
     return;
   }
 
