@@ -51,6 +51,7 @@ Set these environment variables before starting the indexer:
 | `TEXT_MODEL` | No | `gemma2:27b` | Model used for PDFs and EPUBs |
 | `SCAN_INTERVAL_HOURS` | No | `12` | Hours between background maintenance scans |
 | `FACE_MODEL` | No | `buffalo_l` | InsightFace model pack for local face embeddings |
+| `FACE_SIMILARITY_THRESHOLD` | No | `0.48` | Cosine similarity threshold used to cluster face embeddings |
 | `THUMBNAIL_DIR` | No | `/tmp/classy-thumbnails` | Generated thumbnail storage directory |
 | `PORT` | For web process | None | Port used by the health-check server |
 
@@ -143,6 +144,8 @@ browser.
 - `GET /api/media/:id/content`: stream the original file, including byte ranges for video and audio playback.
 - `GET /api/media/:id/thumbnail`: stream the generated JPEG thumbnail for photos, videos, and PDFs.
 - `GET /api/media/:id/faces`: detected face boxes and confidence without exposing embeddings.
+- `GET /api/face-groups`: similarity groups and member counts.
+- `PATCH /api/face-groups/:id`: assign or change a group name with `{ "label": "..." }`.
 - `GET /api/status`: scan counters and the current index location.
 - `POST /api/scan`: trigger a new scan and return immediately with `202`.
 - `POST /api/media/:id/reset`: reset all extractors for one file, or target one with `?extractor=vision-classification`.
@@ -197,6 +200,8 @@ boxes, detection scores, and embedding dimensions through
 `GET /api/media/:id/faces`. The InsightFace model is loaded by a persistent
 local worker so it is not initialized once per image. The first face extraction
 downloads the configured InsightFace model pack into the local model cache.
+After scans, embeddings are clustered with cosine similarity. Groups are
+anonymous until named through the group API or desktop group controls.
 
 For CI schedulers or backup hooks, call the API after the files are available
 on storage. The deployed service is protected by basic auth, so keep the
