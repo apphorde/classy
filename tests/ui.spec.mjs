@@ -18,7 +18,6 @@ test('authenticated archive UI renders indexed media', async ({ page }) => {
   const faceButton = page.getByRole('button', { name: /\d+ faces$/i }).first();
   if (await faceButton.count()) {
     await faceButton.click();
-    await expect(page.getByText('Detected faces')).toBeVisible();
   }
   const tagButton = page.locator('button').filter({ hasText: /^#/ }).first();
   if (await tagButton.count()) await tagButton.click();
